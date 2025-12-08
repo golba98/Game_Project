@@ -23,16 +23,16 @@ var skinColor;
 
 
 function setup() {
-    console.log("Initializing Game...");
-
     createCanvas(windowWidth, windowHeight);
 
+    //Used to ensure the game scales correctly(ChatGPT helped with this)
     document.body.style.overflow = "hidden";
     document.body.style.margin = "0";
     document.body.style.padding = "0";
 
     furColor = color(70, 45, 20);
     skinColor = color(180, 140, 110);
+
     floorPos_y = 450;
     gameChar_x = 100;
     gameChar_y = floorPos_y;
@@ -42,11 +42,10 @@ function setup() {
     canyon = {x_pos: 700, width: 100};
 
     generateTrees();
-
-    console.log("Setup Complete.");
 }
 
 function windowResized() {
+    //Want the game to be the same size as the window
     resizeCanvas(windowWidth, windowHeight);
 }
 
@@ -57,6 +56,7 @@ function draw() {
     background(135, 206, 250);
 
     push();
+    // Scale the canvas to fit the window DO NOT DELETE THIS
     scale(scaleX, scaleY);
 
     var cameraPosX = gameChar_x - ORIGINAL_WIDTH / 2;
@@ -89,7 +89,6 @@ function draw() {
 }
 
 function generateTrees() {
-    console.log("Generating Trees...");
     trees = [];
 
     for (var i = 0; i < 15; i++) {
@@ -114,7 +113,7 @@ function generateTrees() {
                     }
                 }
             }
-            attempts++;
+            attempts += 1;
         }
         if (validPosition) {
             trees.push({x: tx, y: floorPos_y, trunkW: random(30, 50), trunkH: random(90, 160), canopySize: random(110, 160), leafColor: color(random(20, 60), random(100, 180), random(20, 60))});
