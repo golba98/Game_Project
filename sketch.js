@@ -3,6 +3,7 @@ var gameChar_y;
 var floorPos_y;
 
 var trees = [];
+var mountains = []; 
 
 var collectable;
 var canyon;
@@ -20,12 +21,9 @@ const ORIGINAL_HEIGHT = 600;
 var furColor;
 var skinColor;
 
-
-
 function setup() {
     createCanvas(windowWidth, windowHeight);
 
-    //Used to ensure the game scales correctly(ChatGPT helped with this)
     document.body.style.overflow = "hidden";
     document.body.style.margin = "0";
     document.body.style.padding = "0";
@@ -42,10 +40,10 @@ function setup() {
     canyon = {x_pos: 700, width: 100};
 
     generateTrees();
+    generateMountains(); 
 }
 
 function windowResized() {
-    //Want the game to be the same size as the window
     resizeCanvas(windowWidth, windowHeight);
 }
 
@@ -53,10 +51,9 @@ function draw() {
     let scaleX = width / ORIGINAL_WIDTH;
     let scaleY = height / ORIGINAL_HEIGHT;
 
-    background(135, 206, 250);
+    drawSky();
 
     push();
-    // Scale the canvas to fit the window DO NOT DELETE THIS
     scale(scaleX, scaleY);
 
     var cameraPosX = gameChar_x - ORIGINAL_WIDTH / 2;
@@ -64,50 +61,93 @@ function draw() {
     translate(-cameraPosX, 0);
     noStroke();
 
-    drawGround();
-
+    drawMountains(); 
+    drawGround();    
     drawClouds();
-
-    drawMountains();
-
     drawTrees();
-
     drawCanyon(canyon.x_pos, floorPos_y, canyon.width, ORIGINAL_HEIGHT - floorPos_y);
 
     checkCanyon();
-
     checkCollectable();
-
-    handleMovement();
+    
+    if (gameChar_y < ORIGINAL_HEIGHT + 100) {
+        handleMovement();
+    }
 
     renderGameChar();
-
     updatePhysics();
 
-    pop();
+    pop(); 
+
+    if (gameChar_y > ORIGINAL_HEIGHT) {
+        fill(40, 0, 0, 200);
+        rect(0, 0, width, height);
+        
+        fill(0, 0, 0, 220);
+        stroke(200, 0, 0);
+        strokeWeight(4);
+        rectMode(CENTER);
+        rect(width / 2, height / 2, 400, 200, 20);
+        rectMode(CORNER);
+        
+        textAlign(CENTER, CENTER);
+        textSize(50);
+        textStyle(BOLD);
+        
+        noStroke();
+        fill(0, 0, 0); 
+        text("GAME OVER", width / 2 + 3, height / 2 - 20 + 3);
+        
+        fill(255, 50, 50);
+        text("GAME OVER", width / 2, height / 2 - 20);
+        
+        textSize(20);
+        textStyle(NORMAL);
+        fill(255);
+        
+        if (frameCount % 60 < 40) {
+            text("Press SPACE to Respawn", width / 2, height / 2 + 50);
+        }
+    }
+
     coinAngle += 0.05;
+}
+
+function generateMountains() {
+    mountains = [];
+    for (var i = 0; i < 15; i++) {
+        var tw = random(200, 500); 
+        var th = random(200, 450);
+        
+        var tx = random(-2000, 3000 - tw); 
+        
+        var tc = random(80, 180); 
+        
+        mountains.push({x: tx, width: tw, height: th, color: tc});
+    }
 }
 
 function generateTrees() {
     trees = [];
 
-    for (var i = 0; i < 15; i++) {
+    for (var i = 0; i < 20; i++) {
         var validPosition = false;
         var maxAttempts = 100;
         var attempts = 0;
         var tx = 0;
 
         while (!validPosition && attempts < maxAttempts) {
-            tx = random(-1500, 2500);
+            tx = random(-2000, 2900); 
             validPosition = true;
 
             if (tx > canyon.x_pos - 80 && tx < canyon.x_pos + canyon.width + 80) {
                 validPosition = false;
             }
+            
             if (validPosition) {
                 for (var j = 0; j < trees.length; j++) {
                     var d = abs(trees[j].x - tx);
-                    if (d < 120) {
+                    if (d < 100) {
                         validPosition = false;
                         break;
                     }
@@ -115,9 +155,74 @@ function generateTrees() {
             }
             attempts += 1;
         }
+        
         if (validPosition) {
-            trees.push({x: tx, y: floorPos_y, trunkW: random(30, 50), trunkH: random(90, 160), canopySize: random(110, 160), leafColor: color(random(20, 60), random(100, 180), random(20, 60))});
+            trees.push({
+                x: tx, 
+                y: floorPos_y, 
+                trunkW: random(30, 50), 
+                trunkH: random(90, 160), 
+                canopySize: random(110, 160), 
+                leafColor: color(random(20, 60), random(100, 180), random(20, 60))
+            });
         }
+    }
+}
+
+function drawMountains() {
+    for (var i = 0; i < mountains.length; i++) {
+        var m = mountains[i];
+        drawMountain(m);
+    }
+}
+
+function drawMountain(m) {
+    let x = m.x;
+    let y = floorPos_y;
+    let w = m.width;
+    let h = m.height;
+    let c = m.color; 
+
+    let peakX = x + w / 2;
+    let peakY = y - h;
+
+    noStroke();
+    fill(c - 40); 
+    triangle(x, y, peakX, peakY, peakX, y);
+
+    fill(c); 
+    triangle(peakX, y, peakX, peakY, x + w, y);
+
+    let capScale = 0.2; 
+    let capH = h * capScale;
+    let capW = w * capScale; 
+    let capBottomY = peakY + capH;
+    
+    fill(210, 210, 220); 
+    triangle(peakX, peakY, peakX - capW / 2, capBottomY, peakX, capBottomY);
+    
+    fill(255, 255, 255); 
+    triangle(peakX, peakY, peakX + capW / 2, capBottomY, peakX, capBottomY);
+}
+
+function drawTrees() {
+    for (var i = 0; i < trees.length; i++) {
+        var t = trees[i];
+        fill(0, 50);
+        ellipse(t.x + t.trunkW / 2, t.y, t.trunkW * 1.5, 10);
+
+        fill(100, 50, 10);
+        rect(t.x, t.y - t.trunkH, t.trunkW, t.trunkH);
+
+        fill(t.leafColor);
+        ellipse(t.x + t.trunkW / 2, t.y - t.trunkH * 0.8, t.canopySize, t.canopySize * 0.8);
+
+        fill(red(t.leafColor) + 20, green(t.leafColor) + 20, blue(t.leafColor) + 20);
+        ellipse(t.x + t.trunkW / 2 - 20, t.y - t.trunkH, t.canopySize * 0.7, t.canopySize * 0.7);
+        ellipse(t.x + t.trunkW / 2 + 20, t.y - t.trunkH, t.canopySize * 0.7, t.canopySize * 0.7);
+
+        fill(t.leafColor);
+        ellipse(t.x + t.trunkW / 2, t.y - t.trunkH * 1.2, t.canopySize * 0.6, t.canopySize * 0.6);
     }
 }
 
@@ -145,8 +250,13 @@ function updatePhysics() {
     else {
         isFalling = false;
     }
+
+    if(gameChar_x < -2000 || gameChar_x > 3000) {
+        isPlummeting = true;
+    }
+
     if (isPlummeting == true) {
-        gameChar_y += 5;
+        gameChar_y += 5; 
     }
 }
 
@@ -168,6 +278,20 @@ function checkCollectable() {
 }
 
 function keyPressed() {
+    if (gameChar_y > ORIGINAL_HEIGHT) {
+        if (keyCode == 32) { 
+            gameChar_x = 100;
+            gameChar_y = floorPos_y;
+            isPlummeting = false;
+            isFalling = false;
+            isLeft = false;
+            isRight = false;
+            generateTrees();
+            generateMountains(); 
+        }
+        return; 
+    }
+
     if (isPlummeting) { return; }
 
     if (keyCode == 32 || keyCode == 87) {
@@ -317,60 +441,40 @@ function drawBigfootHead(x, y, dir) {
 }
 
 function drawGround() {
-    fill(34, 139, 34);
+    noStroke();
+    
+    fill(139, 69, 19); 
     rect(-2000, floorPos_y, ORIGINAL_WIDTH + 4000, ORIGINAL_HEIGHT / 2);
+
+    fill(34, 139, 34); 
+    rect(-2000, floorPos_y, ORIGINAL_WIDTH + 4000, 20); 
+
+    fill(20, 80, 20, 100);
+    rect(-2000, floorPos_y + 20, ORIGINAL_WIDTH + 4000, 5);
 }
 
 function drawClouds() {
+    drawCloud(-450, 90);
+    drawCloud(-200, 120);
     drawCloud(150, 100);
     drawCloud(300, 150);
+    drawCloud(450, 70);
     drawCloud(600, 120);
     drawCloud(800, 80);
+    drawCloud(1100, 140);
+    drawCloud(1400, 100);
 }
 
 
 function drawCloud(x, y) {
-    fill(255);
     noStroke();
+    fill(255, 255, 255, 200); 
     ellipse(x, y, 80, 60);
     ellipse(x + 40, y, 100, 70);
     ellipse(x + 80, y, 80, 60);
-}
-
-function drawMountains() {
-    drawMountain(100, floorPos_y, 500, 400);
-    drawMountain(350, floorPos_y, 450, 350);
-    drawMountain(600, floorPos_y, 600, 500);
-}
-
-function drawMountain(baseX, baseY, w, h) {
-    fill(120);
-    noStroke();
-    triangle(baseX, baseY, baseX + w / 2, baseY - h, baseX + w, baseY);
-
-    fill(255);
-    triangle(baseX + w / 2, baseY - h, baseX + w / 2 - 30, baseY - h + 50, baseX + w / 2 + 30, baseY - h + 50);
-}
-
-function drawTrees() {
-    for (var i = 0; i < trees.length; i++) {
-        var t = trees[i];
-        fill(0, 50);
-        ellipse(t.x + t.trunkW / 2, t.y, t.trunkW * 1.5, 10);
-
-        fill(100, 50, 10);
-        rect(t.x, t.y - t.trunkH, t.trunkW, t.trunkH);
-
-        fill(t.leafColor);
-        ellipse(t.x + t.trunkW / 2, t.y - t.trunkH * 0.8, t.canopySize, t.canopySize * 0.8);
-
-        fill(red(t.leafColor) + 20, green(t.leafColor) + 20, blue(t.leafColor) + 20);
-        ellipse(t.x + t.trunkW / 2 - 20, t.y - t.trunkH, t.canopySize * 0.7, t.canopySize * 0.7);
-        ellipse(t.x + t.trunkW / 2 + 20, t.y - t.trunkH, t.canopySize * 0.7, t.canopySize * 0.7);
-
-        fill(t.leafColor);
-        ellipse(t.x + t.trunkW / 2, t.y - t.trunkH * 1.2, t.canopySize * 0.6, t.canopySize * 0.6);
-    }
+    
+    fill(255, 255, 255, 100); 
+    ellipse(x + 30, y - 10, 50, 40);
 }
 
 function drawCoin(x, y) {
@@ -416,4 +520,25 @@ function drawCanyon(x, y, w, h) {
 
     fill(30, 10, 5);
     triangle(x + w / 2 - 10, y + h, x + w / 2 + 10, y + h, x + w / 2, y + h - 30);
+}
+
+function drawSky() {
+    let c1 = color(100, 150, 255); 
+    let c2 = color(200, 230, 255);
+    
+    noFill();
+    for (let y = 0; y < height; y++) {
+        let inter = map(y, 0, height, 0, 1);
+        let c = lerpColor(c1, c2, inter);
+        stroke(c);
+        line(0, y, width, y);
+    }
+
+    noStroke();
+    fill(255, 255, 0, 100); 
+    ellipse(width - 150, 100, 140, 140);
+    fill(255, 255, 0, 150); 
+    ellipse(width - 150, 100, 120, 120); 
+    fill(255, 255, 0);      
+    ellipse(width - 150, 100, 80, 80);   
 }
