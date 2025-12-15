@@ -858,29 +858,44 @@ function drawSleepingFrame(cave) {
     if (!cave) {
         return;
     }
+    // Draw a horizontal sleeping pose that mirrors the standing character.
+    let cx = cave.x_pos + cave.width / 2;
+    let fy = floorPos_y - 6;
+
     push();
-    let centerX = cave.x_pos + cave.width / 2;
-    let floorY = floorPos_y - 5;
-
+    // body (rounded rectangle lying on its back)
     fill(furColor);
-    rect(centerX - 35, floorY - 15, 70, 20, 8);
+    rect(cx - 36, fy - 18, 72, 40, 12);
 
+    // small rounded feet (two tiny ovals) under body
+    fill(furColor);
+    ellipse(cx - 14, fy + 6, 12, 10);
+    ellipse(cx + 14, fy + 6, 12, 10);
+
+    // arms as rounded rectangles
+    rect(cx - 44, fy - 20, 10, 28, 6);
+    rect(cx + 34, fy - 20, 10, 28, 6);
+
+    // head placed to the right of body (like attachment)
     fill(skinColor);
-    ellipse(centerX - 32, floorY - 18, 20, 18);
+    ellipse(cx + 34, fy - 12, 34, 34);
 
-    fill(0);
-    ellipse(centerX - 38, floorY - 20, 3, 3);
-    ellipse(centerX - 28, floorY - 20, 3, 3);
-
+    // head fur ring
     fill(furColor);
-    rect(centerX - 38, floorY - 5, 8, 12, 4);
-    rect(centerX + 30, floorY - 5, 8, 12, 4);
+    ellipse(cx + 34, fy - 12, 48, 48);
+    fill(skinColor);
+    ellipse(cx + 34, fy - 12, 30, 30);
 
+    // eyes
+    fill(0);
+    ellipse(cx + 28, fy - 14, 4, 4);
+    ellipse(cx + 40, fy - 14, 4, 4);
+
+    // Zzz text to the right of head
     fill(0);
     textSize(18);
-    textAlign(CENTER, CENTER);
-    text("Zzz", centerX + 18, floorY - 25);
-    text("Zzz", centerX + 18, floorY - 15);
+    textAlign(LEFT, TOP);
+    text("Zzz", cx + 48, fy - 26);
     pop();
 }
 
