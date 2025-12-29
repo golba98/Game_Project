@@ -69,5 +69,3 @@ CREDITS
 -------
 Created by: Jordan Vorster
 Built with: JavaScript and p5.js
-
-If you want me to expand this README (screenshots, controls table, or development notes), tell me what you'd like added.
