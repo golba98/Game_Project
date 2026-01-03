@@ -6,8 +6,8 @@ var trees = [];
 var mountains = [];
 var clouds = [];
 
-var collectable;
-var canyon;
+var collectables = [];
+var canyons = [];
 var cave;
 
 var isLeft = false;
@@ -46,7 +46,6 @@ const SEASON_DURATION = 720;
 function setup() {
     createCanvas(windowWidth, windowHeight);
 
-    //AI Generated code to remove scrollbars
     document.body.style.overflow = "hidden";
     document.body.style.margin = "0";
     document.body.style.padding = "0";
@@ -58,18 +57,81 @@ function setup() {
     gameChar_x = 100;
     gameChar_y = floorPos_y;
 
-    collectable = { x_pos: ORIGINAL_WIDTH / 2, y_pos: floorPos_y - 20, size: 50, isFound: false };
-    canyon = { x_pos: 700, width: 100 };
+    canyons = [];
+    for (var i = 0; i < 5; i++) {
+        var validCanyon = false;
+        var attempts = 0;
+        while (!validCanyon && attempts < 100) {
+            var cx = random(-2000, 3000);
+            var cw = random(80, 140);
+            validCanyon = true;
+            
+            for (var j = 0; j < canyons.length; j++) {
+                if (abs(canyons[j].x_pos - cx) < 300) {
+                    validCanyon = false;
+                    break;
+                }
+            }
 
-    //Generate Cave
-    {
-        let cx = random(-1500, 2500);
-        let cw = random(220, 320);
-        let ch = random(160, 220);
-        cave = { x_pos: cx, width: cw, height: ch };
+            if (cx < gameChar_x + 150 && cx + cw > gameChar_x - 150) {
+                validCanyon = false;
+            }
+            
+            if (validCanyon) {
+                canyons.push({ x_pos: cx, width: cw });
+            }
+            attempts++;
+        }
     }
 
-    // Initialize Seasons
+    {
+        var validCave = false;
+        var attempts = 0;
+        while (!validCave && attempts < 100) {
+            let cx = random(-1500, 2500);
+            let cw = random(220, 320);
+            let ch = random(160, 220);
+            
+            validCave = true;
+            for (var i = 0; i < canyons.length; i++) {
+                if (cx + cw > canyons[i].x_pos - 50 && cx < canyons[i].x_pos + canyons[i].width + 50) {
+                    validCave = false;
+                    break;
+                }
+            }
+            
+            if (validCave) {
+                cave = { x_pos: cx, width: cw, height: ch };
+            }
+            attempts++;
+        }
+        if (!cave) {
+             cave = { x_pos: -1000, width: 250, height: 200 };
+        }
+    }
+
+    collectables = [];
+    for (var i = 0; i < 5; i++) {
+        var validCoin = false;
+        var attempts = 0;
+        while (!validCoin && attempts < 100) {
+            var cx = random(-2000, 3000);
+            validCoin = true;
+            
+            for (var j = 0; j < canyons.length; j++) {
+                if (cx > canyons[j].x_pos - 20 && cx < canyons[j].x_pos + canyons[j].width + 20) {
+                    validCoin = false;
+                    break;
+                }
+            }
+            
+            if (validCoin) {
+                collectables.push({ x_pos: cx, y_pos: floorPos_y - 20, diameter: 50, isFound: false });
+            }
+            attempts++;
+        }
+    }
+
    seasons = [];
     for (var i = 0; i < seasonSpecs.length; i++) {
         var spec = seasonSpecs[i];
@@ -82,7 +144,6 @@ function setup() {
         });
     }
 
-    //Generate Trees
     trees = [];
     const CAVE_CLEARANCE = 220;
 
@@ -96,8 +157,11 @@ function setup() {
             tx = random(-2000, 2900);
             validPosition = true;
 
-            if (tx > canyon.x_pos - 80 && tx < canyon.x_pos + canyon.width + 80) {
-                validPosition = false;
+            for (var c = 0; c < canyons.length; c++) {
+                if (tx > canyons[c].x_pos - 80 && tx < canyons[c].x_pos + canyons[c].width + 80) {
+                    validPosition = false;
+                    break;
+                }
             }
 
             if (cave) {
@@ -137,7 +201,6 @@ function setup() {
         }
     }
 
-    //Generate Mountains
     mountains = [];
     for (var i = 0; i < 15; i++) {
         var tw = random(200, 500);
@@ -147,14 +210,13 @@ function setup() {
         mountains.push({ x: tx, width: tw, height: th, color: tc });
     }
 
-    //Generate Clouds
     clouds = [];
     for (let i = 0; i < 14; i++) {
         let cx = random(-2000, 3000);
         let cy = random(60, 180);
-        let speed = random(0.2, 1.2);
+        let cloudSpeed = random(0.2, 1.2);
         let col = color(random(220, 255), random(220, 255), random(230, 255), random(180, 230));
-        clouds.push({ x: cx, y: cy, speed: speed, color: col });
+        clouds.push({ x: cx, y: cy, cloudSpeed: cloudSpeed, color: col });
     }
 }
 
@@ -164,212 +226,7 @@ function windowResized() {
 }
 
 
-function draw() {
-    let scaleX = width / ORIGINAL_WIDTH;
-    let scaleY = height / ORIGINAL_HEIGHT;
-
-    //Cycle Management (Day/Night & Seasons)
-    timeOfDay += cycleSpeed;
-    if (timeOfDay >= 1440) {
-        timeOfDay = 0;
-    }
-
-    if (isHibernating) {
-        hibernationTimer += 1;
-        if (hibernationTimer >= HIBERNATION_DURATION) {
-            isHibernating = false;
-            hibernationTimer = 0;
-        }
-    }
-
-    seasonTime += cycleSpeed;
-    if (seasonTime >= SEASON_DURATION) {
-        seasonTime -= SEASON_DURATION;
-
-        //Advance Season
-        currentSeasonIndex = (currentSeasonIndex + 1 + seasons.length) % seasons.length;
-
-        let seasonForCycle = seasons[currentSeasonIndex] || seasons[0];
-        if (seasonForCycle.name === "Summer" && isHibernating) {
-            isHibernating = false;
-            hibernationTimer = 0;
-        }
-    }
-
-    const currentSeason = seasons[currentSeasonIndex] || seasons[0] || { name: "Default", sky: color(200, 230, 255), ground: color(150, 220, 140), grass: color(40, 160, 70), leaf: color(120, 200, 130) };
-
-
-    // ------------------------------------
-    //              DRAW SKY
-    // ------------------------------------
-    let c1, c2;
-    let sunMoonSize = 80;
-    let starCount = 0;
-    let drawOverlay = null; // { type: 'sun'|'moon', x, y, size, ...params }
-
-    let sunProgress = map(constrain(timeOfDay, 240, 1140), 240, 1140, 0, 1);
-    let sunX = map(sunProgress, 0, 1, -100, width + 100);
-    let sunY = 150 - sin(sunProgress * PI) * 120;
-
-    let moonCycleTime = timeOfDay < 240 ? timeOfDay + 1440 : timeOfDay;
-    let moonProgress = map(constrain(moonCycleTime, 1140, 1680), 1140, 1680, 0, 1);
-    let moonX = map(moonProgress, 0, 1, width + 100, -100);
-    let moonY = 150 - sin(moonProgress * PI) * 120;
-
-    // Calculate Sky Colors and Celestial Objects
-    if (timeOfDay < 240) {
-        // Deep Night
-        let t = map(timeOfDay, 0, 240, 0, 1);
-        c1 = lerpColor(color(10, 10, 40), color(15, 15, 50), t);
-        c2 = lerpColor(color(20, 20, 60), color(25, 25, 70), t);
-        starCount = 200;
-        drawOverlay = { type: 'moon', x: moonX, y: moonY, size: sunMoonSize, glowAlpha: 120, coreAlpha: 255, craterAlpha: 200 };
-
-    } else if (timeOfDay < 420) {
-        // Sunrise
-        let t = map(timeOfDay, 240, 420, 0, 1);
-        c1 = lerpColor(color(15, 15, 50), color(255, 150, 100), t);
-        c2 = lerpColor(color(25, 25, 70), color(135, 206, 250), t);
-
-        if (t < 0.5) {
-            let moonFade = (1 - t * 2);
-            starCount = int(moonFade * 200);
-            drawOverlay = { type: 'moon', x: moonX, y: moonY, size: sunMoonSize, glowAlpha: 120 * moonFade, coreAlpha: 255 * moonFade, craterAlpha: 200 * moonFade };
-        } else {
-            let sunGrow = (t - 0.5) * 2;
-            drawOverlay = { type: 'sun', x: sunX, y: sunY, size: sunMoonSize, glowAlpha: 200 * sunGrow, rimAlpha: 180 * sunGrow, coreAlpha: 255 * sunGrow };
-        }
-
-    } 
-    
-    else if (timeOfDay < 900) {
-        // Day
-        let t = map(timeOfDay, 420, 900, 0, 1);
-
-        c1 = lerpColor(color(135, 206, 250), color(100, 150, 255), t);
-        c2 = lerpColor(color(200, 230, 255), color(180, 220, 255), t);
-
-        drawOverlay = { type: 'sun', x: sunX, y: sunY, size: sunMoonSize, glowAlpha: 200, rimAlpha: 150, coreAlpha: 255 };
-
-    } 
-    
-    else if (timeOfDay < 1140) {
-        // Sunset
-        let t = map(timeOfDay, 900, 1140, 0, 1);
-
-        c1 = lerpColor(color(100, 150, 255), color(180, 80, 120), t);
-        c2 = lerpColor(color(180, 220, 255), color(50, 30, 80), t);
-        
-        let sunFade = max(0, 1 - t / 0.7);
-
-        if (sunFade > 0) {
-            drawOverlay = { type: 'sun', x: sunX, y: sunY, size: sunMoonSize, glowAlpha: 200 * sunFade, rimAlpha: 160 * sunFade, coreAlpha: 255 * sunFade };
-        }
-        if (t >= 0.7) {
-            starCount = int(((t - 0.7) / 0.3) * 100);
-        }
-
-    } 
-    
-    else {
-        // Night
-        let t = map(timeOfDay, 1140, 1440, 0, 1);
-
-        c1 = lerpColor(color(180, 80, 120), color(10, 10, 40), t);
-        c2 = lerpColor(color(50, 30, 80), color(20, 20, 60), t);
-
-        starCount = int(t * 200 + 50);
-        drawOverlay = { type: 'moon', x: moonX, y: moonY, size: sunMoonSize, glowAlpha: 130, coreAlpha: 255, craterAlpha: 220 };
-    }
-
-    // Render Sky Gradient
-    noFill();
-    for (let y = 0; y < height; y++) {
-        let inter = map(y, 0, height, 0, 1);
-        let c = lerpColor(c1, c2, inter);
-
-        c = lerpColor(c, currentSeason.sky, 0.25);
-        stroke(c);
-        line(0, y, width, y);
-    }
-
-    // Render Stars
-    if (starCount > 0) {
-        randomSeed(42);
-        noStroke();
-        for (let i = 0; i < starCount; i++) {
-            let sx = random(width);
-            let sy = random(height * 0.6);
-            let twinkle = sin(frameCount * 0.05 + i) * 0.5 + 0.5;
-
-            fill(255, 255, 255, 150 + twinkle * 100);
-            ellipse(sx, sy, 2, 2);
-        }
-        randomSeed(millis());
-    }
-
-    // Render Sun or Moon
-    if (drawOverlay) {
-        if (drawOverlay.type === 'sun') {
-            let x = drawOverlay.x;
-            let y = drawOverlay.y;
-            let size = drawOverlay.size;
-            let glowAlpha = drawOverlay.glowAlpha;
-            let rimAlpha = drawOverlay.rimAlpha;
-            let coreAlpha = drawOverlay.coreAlpha;
-            let glowExtra = 60;
-            let rimExtra = 40;
-
-            noStroke();
-            fill(255, 255, 0, glowAlpha);
-            ellipse(x, y, size + glowExtra, size + glowExtra);
-            fill(255, 255, 0, rimAlpha);
-            ellipse(x, y, size + rimExtra, size + rimExtra);
-            fill(255, 255, 0, coreAlpha);
-            ellipse(x, y, size, size);
-
-        } else if (drawOverlay.type === 'moon') {
-            let x = drawOverlay.x;
-            let y = drawOverlay.y;
-            let size = drawOverlay.size;
-            let glowAlpha = drawOverlay.glowAlpha;
-            let coreAlpha = drawOverlay.coreAlpha;
-            let craterAlpha = drawOverlay.craterAlpha;
-
-            noStroke();
-            fill(220, 220, 235, glowAlpha);
-            ellipse(x, y, size + 30, size + 30);
-            fill(240, 240, 255, coreAlpha);
-            ellipse(x, y, size, size);
-            fill(230, 230, 245, craterAlpha);
-            ellipse(x - 12, y - 6, size * 0.25, size * 0.25);
-            ellipse(x + 8, y + 5, size * 0.2, size * 0.2);
-        }
-    }
-
-
-    // --- Draw Season Label ---
-    push();
-    fill(255);
-    stroke(0);
-    strokeWeight(3);
-    textSize(18);
-    textStyle(BOLD);
-    textAlign(LEFT, TOP);
-    pop();
-
-
-    // ------------------------------------
-    //          WORLD RENDERING
-    // ------------------------------------
-    push();
-    scale(scaleX, scaleY); // Adjust for window size
-
-    var cameraPosX = gameChar_x - ORIGINAL_WIDTH / 2;
-    translate(-cameraPosX, 0);
-    noStroke();
-
-    //Draw Mountains
+function drawMountains() {
     for (var i = 0; i < mountains.length; i++) {
         var m = mountains[i];
         let x = m.x;
@@ -388,7 +245,6 @@ function draw() {
         fill(c);
         triangle(peakX, y, peakX, peakY, x + w, y);
 
-        // Snow Cap
         let capScale = 0.2;
         let capH = h * capScale;
         let capW = w * capScale;
@@ -399,81 +255,9 @@ function draw() {
         fill(255, 255, 255);
         triangle(peakX, peakY, peakX + capW / 2, capBottomY, peakX, capBottomY);
     }
+}
 
-    //Draw Ground
-    noStroke();
-    // Deep ground
-    fill(lerpColor(color(139, 69, 19), currentSeason.ground, 0.45));
-    rect(-2000, floorPos_y, ORIGINAL_WIDTH + 4000, ORIGINAL_HEIGHT / 2);
-
-    // Grass top layer
-    fill(lerpColor(color(34, 139, 34), currentSeason.grass, 0.55));
-    rect(-2000, floorPos_y, ORIGINAL_WIDTH + 4000, 20);
-
-    // Grass highlight
-    fill(currentSeason.grass.levels ? color(currentSeason.grass.levels[0], currentSeason.grass.levels[1], currentSeason.grass.levels[2], 120) : color(20, 80, 20, 100));
-    rect(-2000, floorPos_y + 20, ORIGINAL_WIDTH + 4000, 5);
-
-
-    //Draw Cave
-    if (cave) {
-        let x = cave.x_pos;
-        let y = floorPos_y;
-        let w = cave.width;
-        let h = cave.height;
-        let centerX = x + w / 2;
-
-        fill(95, 75, 55);
-        arc(centerX, y, w, h * 1.2, PI, TWO_PI, CHORD);
-
-        fill(10, 8, 4);
-        arc(centerX, y - 8, w * 0.65, h * 0.5, PI, TWO_PI, CHORD);
-
-        stroke(70, 55, 40);
-        strokeWeight(3);
-        line(centerX - w * 0.2, y - 5, centerX - w * 0.08, y + 8);
-        line(centerX + w * 0.2, y - 5, centerX + w * 0.08, y + 8);
-        noStroke();
-    }
-
-
-    //Draw Sleeping Frame (Hibernation)
-    if (isHibernating && cave) {
-        let cx = cave.x_pos + cave.width / 2;
-        let fy = floorPos_y - 6;
-
-        push();
-        fill(furColor);
-        rect(cx - 36, fy - 18, 72, 40, 12);
-
-        fill(furColor);
-        ellipse(cx - 14, fy + 6, 12, 10);
-        ellipse(cx + 14, fy + 6, 12, 10);
-
-        rect(cx - 44, fy - 20, 10, 28, 6);
-        rect(cx + 34, fy - 20, 10, 28, 6);
-
-        fill(skinColor);
-        ellipse(cx + 34, fy - 12, 34, 34);
-
-        fill(furColor);
-        ellipse(cx + 34, fy - 12, 48, 48);
-        fill(skinColor);
-        ellipse(cx + 34, fy - 12, 30, 30);
-
-        fill(0);
-        ellipse(cx + 28, fy - 14, 4, 4);
-        ellipse(cx + 40, fy - 14, 4, 4);
-
-        // Zzz
-        fill(0);
-        textSize(18);
-        textAlign(LEFT, TOP);
-        text("Zzz", cx + 48, fy - 26);
-        pop();
-    }
-
-    //Draw Clouds
+function drawClouds() {
     for (let i = 0; i < clouds.length; i++) {
         let c = clouds[i];
         let x = c.x;
@@ -497,31 +281,29 @@ function draw() {
         fill(hr, hg, hb, 140);
         ellipse(x + 30, y - 10, 50, 40);
 
-        c.x += c.speed;
+        c.x += c.cloudSpeed;
 
-        // Reset cloud when off screen
         if (c.x > 4000) {
             c.x = -800 - random(0, 600);
             c.y = random(60, 180);
-            c.speed = random(0.2, 1.2);
+            c.cloudSpeed = random(0.2, 1.2);
         }
     }
+}
 
-    //Draw Trees
+function drawTrees() {
+    const currentSeason = seasons[currentSeasonIndex] || seasons[0];
+    
     for (var i = 0; i < trees.length; i++) {
         var t = trees[i];
         
-        // Shadow
         fill(0, 50);
         ellipse(t.x + t.trunkW / 2, t.y, t.trunkW * 1.5, 10);
 
-        // Trunk
         let trunkColor = currentSeason.name === "Winter" ? color(90, 60, 40) : color(100, 50, 10);
         fill(trunkColor);
         rect(t.x, t.y - t.trunkH, t.trunkW, t.trunkH);
 
-        // Canopy based on season
-        // Calculate common position variables once
         var cx = t.x + t.trunkW / 2;
         var baseY = t.y;
 
@@ -562,7 +344,6 @@ function draw() {
             ellipse(cx, baseY - t.trunkH * 1.2, canopy * 0.5, canopy * 0.5);
 
             noStroke();
-            // Falling leaves particles
             for (var k = 0; k < 3; k++) {
                 var drop = (frameCount * 0.4 + t.particlePhase * 30 + k * 25) % 60;
                 var xOffset = cos(frameCount * 0.02 + t.particlePhase + k) * 25;
@@ -571,7 +352,6 @@ function draw() {
             }
         } 
         else {
-            // Default to Spring
             var leafShade = lerpColor(t.leafColor, currentSeason.leaf, 0.45);
             var canopy = t.canopySize;
 
@@ -591,45 +371,40 @@ function draw() {
             ellipse(cx, baseY - t.trunkH * 1.2, canopy * 0.6, canopy * 0.6);
         }
     }
+}
 
-    //Draw Canyon
-    {
-        let x = canyon.x_pos;
-        let y = floorPos_y;
-        let w = canyon.width;
-        let h = ORIGINAL_HEIGHT - floorPos_y;
+function drawCanyon(canyon_object) {
+    let x = canyon_object.x_pos;
+    let y = floorPos_y;
+    let w = canyon_object.width;
+    let h = ORIGINAL_HEIGHT - floorPos_y;
 
-        noStroke();
-        fill(40, 20, 10);
-        rect(x, y, w, h);
-        
-        fill(80, 45, 20);
-        beginShape();
-        vertex(x, y);
-        vertex(x + 20, y + h);
-        vertex(x, y + h);
-        endShape(CLOSE);
+    noStroke();
+    fill(40, 20, 10);
+    rect(x, y, w, h);
+    
+    fill(80, 45, 20);
+    beginShape();
+    vertex(x, y);
+    vertex(x + 20, y + h);
+    vertex(x, y + h);
+    endShape(CLOSE);
 
-        fill(60, 30, 10);
-        beginShape();
-        vertex(x + w, y);
-        vertex(x + w - 20, y + h);
-        vertex(x + w, y + h);
-        endShape(CLOSE);
+    fill(60, 30, 10);
+    beginShape();
+    vertex(x + w, y);
+    vertex(x + w - 20, y + h);
+    vertex(x + w, y + h);
+    endShape(CLOSE);
 
-        fill(30, 10, 5);
-        triangle(x + w / 2 - 10, y + h, x + w / 2 + 10, y + h, x + w / 2, y + h - 30);
-    }
+    fill(30, 10, 5);
+    triangle(x + w / 2 - 10, y + h, x + w / 2 + 10, y + h, x + w / 2, y + h - 30);
+}
 
-    //Check Canyon Physics
-    if (gameChar_x > canyon.x_pos && gameChar_x < canyon.x_pos + canyon.width && gameChar_y >= floorPos_y) {
-        isPlummeting = true;
-    }
-
-    //Collectable Item
-    if (collectable.isFound == false) {
+function drawCollectable(collectable_object) {
+    if (collectable_object.isFound == false) {
         push();
-        translate(collectable.x_pos, collectable.y_pos);
+        translate(collectable_object.x_pos, collectable_object.y_pos);
         rotate(coinAngle);
         stroke(0);
         strokeWeight(1);
@@ -646,42 +421,289 @@ function draw() {
         textAlign(CENTER, CENTER);
         text("$", 0, 0);
         pop();
+    }
+}
 
-        if (dist(gameChar_x, gameChar_y, collectable.x_pos, collectable.y_pos) < 50) {
-            collectable.isFound = true;
+function checkCollectable(collectable_object) {
+    if (collectable_object.isFound == false) {
+        if (dist(gameChar_x, gameChar_y, collectable_object.x_pos, collectable_object.y_pos) < 50) {
+            collectable_object.isFound = true;
             console.log("Coin Collected!");
         }
     }
+}
 
-    //Character Movement Logic
+function checkCanyon(canyon_object) {
+    if (gameChar_x > canyon_object.x_pos && 
+        gameChar_x < canyon_object.x_pos + canyon_object.width && 
+        gameChar_y >= floorPos_y) {
+        isPlummeting = true;
+    }
+}
+
+function draw() {
+    let scaleX = width / ORIGINAL_WIDTH;
+    let scaleY = height / ORIGINAL_HEIGHT;
+
+    timeOfDay += cycleSpeed;
+    if (timeOfDay >= 1440) {
+        timeOfDay = 0;
+    }
+
+    if (isHibernating) {
+        hibernationTimer += 1;
+        if (hibernationTimer >= HIBERNATION_DURATION) {
+            isHibernating = false;
+            hibernationTimer = 0;
+        }
+    }
+
+    seasonTime += cycleSpeed;
+    if (seasonTime >= SEASON_DURATION) {
+        seasonTime -= SEASON_DURATION;
+        currentSeasonIndex = (currentSeasonIndex + 1 + seasons.length) % seasons.length;
+
+        let seasonForCycle = seasons[currentSeasonIndex] || seasons[0];
+        if (seasonForCycle.name === "Summer" && isHibernating) {
+            isHibernating = false;
+            hibernationTimer = 0;
+        }
+    }
+
+    const currentSeason = seasons[currentSeasonIndex] || seasons[0] || { name: "Default", sky: color(200, 230, 255), ground: color(150, 220, 140), grass: color(40, 160, 70), leaf: color(120, 200, 130) };
+
+    let c1, c2;
+    let sunMoonSize = 80;
+    let starCount = 0;
+    let drawOverlay = null;
+
+    let sunProgress = map(constrain(timeOfDay, 240, 1140), 240, 1140, 0, 1);
+    let sunX = map(sunProgress, 0, 1, -100, width + 100);
+    let sunY = 150 - sin(sunProgress * PI) * 120;
+
+    let moonCycleTime = timeOfDay < 240 ? timeOfDay + 1440 : timeOfDay;
+    let moonProgress = map(constrain(moonCycleTime, 1140, 1680), 1140, 1680, 0, 1);
+    let moonX = map(moonProgress, 0, 1, width + 100, -100);
+    let moonY = 150 - sin(moonProgress * PI) * 120;
+
+    if (timeOfDay < 240) {
+        let t = map(timeOfDay, 0, 240, 0, 1);
+        c1 = lerpColor(color(10, 10, 40), color(15, 15, 50), t);
+        c2 = lerpColor(color(20, 20, 60), color(25, 25, 70), t);
+        starCount = 200;
+        drawOverlay = { type: 'moon', x: moonX, y: moonY, diameter: sunMoonSize, glowAlpha: 120, coreAlpha: 255, craterAlpha: 200 };
+    } else if (timeOfDay < 420) {
+        let t = map(timeOfDay, 240, 420, 0, 1);
+        c1 = lerpColor(color(15, 15, 50), color(255, 150, 100), t);
+        c2 = lerpColor(color(25, 25, 70), color(135, 206, 250), t);
+
+        if (t < 0.5) {
+            let moonFade = (1 - t * 2);
+            starCount = int(moonFade * 200);
+            drawOverlay = { type: 'moon', x: moonX, y: moonY, diameter: sunMoonSize, glowAlpha: 120 * moonFade, coreAlpha: 255 * moonFade, craterAlpha: 200 * moonFade };
+        } else {
+            let sunGrow = (t - 0.5) * 2;
+            drawOverlay = { type: 'sun', x: sunX, y: sunY, diameter: sunMoonSize, glowAlpha: 200 * sunGrow, rimAlpha: 180 * sunGrow, coreAlpha: 255 * sunGrow };
+        }
+    } else if (timeOfDay < 900) {
+        let t = map(timeOfDay, 420, 900, 0, 1);
+        c1 = lerpColor(color(135, 206, 250), color(100, 150, 255), t);
+        c2 = lerpColor(color(200, 230, 255), color(180, 220, 255), t);
+        drawOverlay = { type: 'sun', x: sunX, y: sunY, diameter: sunMoonSize, glowAlpha: 200, rimAlpha: 150, coreAlpha: 255 };
+    } else if (timeOfDay < 1140) {
+        let t = map(timeOfDay, 900, 1140, 0, 1);
+        c1 = lerpColor(color(100, 150, 255), color(180, 80, 120), t);
+        c2 = lerpColor(color(180, 220, 255), color(50, 30, 80), t);
+        let sunFade = max(0, 1 - t / 0.7);
+        if (sunFade > 0) {
+            drawOverlay = { type: 'sun', x: sunX, y: sunY, diameter: sunMoonSize, glowAlpha: 200 * sunFade, rimAlpha: 160 * sunFade, coreAlpha: 255 * sunFade };
+        }
+        if (t >= 0.7) {
+            starCount = int(((t - 0.7) / 0.3) * 100);
+        }
+    } else {
+        let t = map(timeOfDay, 1140, 1440, 0, 1);
+        c1 = lerpColor(color(180, 80, 120), color(10, 10, 40), t);
+        c2 = lerpColor(color(50, 30, 80), color(20, 20, 60), t);
+        starCount = int(t * 200 + 50);
+        drawOverlay = { type: 'moon', x: moonX, y: moonY, diameter: sunMoonSize, glowAlpha: 130, coreAlpha: 255, craterAlpha: 220 };
+    }
+
+    noFill();
+    for (let y = 0; y < height; y++) {
+        let inter = map(y, 0, height, 0, 1);
+        let c = lerpColor(c1, c2, inter);
+        c = lerpColor(c, currentSeason.sky, 0.25);
+        stroke(c);
+        line(0, y, width, y);
+    }
+
+    if (starCount > 0) {
+        randomSeed(42);
+        noStroke();
+        for (let i = 0; i < starCount; i++) {
+            let sx = random(width);
+            let sy = random(height * 0.6);
+            let twinkle = sin(frameCount * 0.05 + i) * 0.5 + 0.5;
+            fill(255, 255, 255, 150 + twinkle * 100);
+            ellipse(sx, sy, 2, 2);
+        }
+        randomSeed(millis());
+    }
+
+    if (drawOverlay) {
+        if (drawOverlay.type === 'sun') {
+            let x = drawOverlay.x;
+            let y = drawOverlay.y;
+            let diameter = drawOverlay.diameter;
+            let glowAlpha = drawOverlay.glowAlpha;
+            let rimAlpha = drawOverlay.rimAlpha;
+            let coreAlpha = drawOverlay.coreAlpha;
+            noStroke();
+            fill(255, 255, 0, glowAlpha);
+            ellipse(x, y, diameter + 60, diameter + 60);
+            fill(255, 255, 0, rimAlpha);
+            ellipse(x, y, diameter + 40, diameter + 40);
+            fill(255, 255, 0, coreAlpha);
+            ellipse(x, y, diameter, diameter);
+        } else if (drawOverlay.type === 'moon') {
+            let x = drawOverlay.x;
+            let y = drawOverlay.y;
+            let diameter = drawOverlay.diameter;
+            let glowAlpha = drawOverlay.glowAlpha;
+            let coreAlpha = drawOverlay.coreAlpha;
+            let craterAlpha = drawOverlay.craterAlpha;
+            noStroke();
+            fill(220, 220, 235, glowAlpha);
+            ellipse(x, y, diameter + 30, diameter + 30);
+            fill(240, 240, 255, coreAlpha);
+            ellipse(x, y, diameter, diameter);
+            fill(230, 230, 245, craterAlpha);
+            ellipse(x - 12, y - 6, diameter * 0.25, diameter * 0.25);
+            ellipse(x + 8, y + 5, diameter * 0.2, diameter * 0.2);
+        }
+    }
+
+    push();
+    scale(scaleX, scaleY);
+    var cameraPosX = gameChar_x - ORIGINAL_WIDTH / 2;
+    translate(-cameraPosX, 0);
+    noStroke();
+
+    drawMountains();
+
+    noStroke();
+    fill(lerpColor(color(139, 69, 19), currentSeason.ground, 0.45));
+    rect(-2000, floorPos_y, ORIGINAL_WIDTH + 4000, ORIGINAL_HEIGHT / 2);
+
+    fill(lerpColor(color(34, 139, 34), currentSeason.grass, 0.55));
+    rect(-2000, floorPos_y, ORIGINAL_WIDTH + 4000, 20);
+
+    fill(currentSeason.grass.levels ? color(currentSeason.grass.levels[0], currentSeason.grass.levels[1], currentSeason.grass.levels[2], 120) : color(20, 80, 20, 100));
+    rect(-2000, floorPos_y + 20, ORIGINAL_WIDTH + 4000, 5);
+
+    if (cave) {
+        let x = cave.x_pos;
+        let y = floorPos_y;
+        let w = cave.width;
+        let h = cave.height;
+        let centerX = x + w / 2;
+        fill(95, 75, 55);
+        arc(centerX, y, w, h * 1.2, PI, TWO_PI, CHORD);
+        fill(10, 8, 4);
+        arc(centerX, y - 8, w * 0.65, h * 0.5, PI, TWO_PI, CHORD);
+        stroke(70, 55, 40);
+        strokeWeight(3);
+        line(centerX - w * 0.2, y - 5, centerX - w * 0.08, y + 8);
+        line(centerX + w * 0.2, y - 5, centerX + w * 0.08, y + 8);
+        noStroke();
+    }
+
+    if (isHibernating && cave) {
+        let cx = cave.x_pos + cave.width / 2;
+        let fy = floorPos_y - 6;
+        push();
+        fill(furColor);
+        rect(cx - 36, fy - 18, 72, 40, 12);
+        fill(furColor);
+        ellipse(cx - 14, fy + 6, 12, 10);
+        ellipse(cx + 14, fy + 6, 12, 10);
+        rect(cx - 44, fy - 20, 10, 28, 6);
+        rect(cx + 34, fy - 20, 10, 28, 6);
+        fill(skinColor);
+        ellipse(cx + 34, fy - 12, 34, 34);
+        fill(furColor);
+        ellipse(cx + 34, fy - 12, 48, 48);
+        fill(skinColor);
+        ellipse(cx + 34, fy - 12, 30, 30);
+        fill(0);
+        ellipse(cx + 28, fy - 14, 4, 4);
+        ellipse(cx + 40, fy - 14, 4, 4);
+        fill(0);
+        textSize(18);
+        textAlign(LEFT, TOP);
+        text("Zzz", cx + 48, fy - 26);
+        pop();
+    }
+
+    drawClouds();
+    drawTrees();
+
+    for (var i = 0; i < canyons.length; i++) {
+        drawCanyon(canyons[i]);
+    }
+
+    for (var i = 0; i < canyons.length; i++) {
+        checkCanyon(canyons[i]);
+    }
+
+    for (var i = 0; i < collectables.length; i++) {
+        drawCollectable(collectables[i]);
+        checkCollectable(collectables[i]);
+    }
+
     if (gameChar_y < ORIGINAL_HEIGHT + 100) {
         if (!isHibernating) {
-            isLeft = false;
-            isRight = false;
-
+            if (isLeft && !keyIsDown(LEFT_ARROW) && !keyIsDown(65)) {
+                isLeft = false;
+            }
+            if (isRight && !keyIsDown(RIGHT_ARROW) && !keyIsDown(68)) {
+                isRight = false;
+            }
             if (isPlummeting == false) {
-                if (keyIsDown(37) || keyIsDown(65)) {
+                if (isLeft) {
                     gameChar_x -= 5;
-                    isLeft = true;
                 }
-                if (keyIsDown(39) || keyIsDown(68)) {
+                if (isRight) {
                     gameChar_x += 5;
-                    isRight = true;
                 }
             }
         }
     }
 
-    // ------------------------------------
-    //        DRAW GAME CHARACTER
-    // ------------------------------------
     if (!isHibernating) {
-        if (isLeft && isFalling) {
-            // Jumping Left
+        if (isLeft && isRight && !isFalling) {
+            fill(furColor);
+            rect(gameChar_x - 20, gameChar_y - 60, 40, 50, 12);
+            {
+                let x = gameChar_x;
+                let y = gameChar_y;
+                let dir = 0;
+                fill(furColor);
+                ellipse(x, y - 65, 40, 45);
+                fill(skinColor);
+                ellipse(x + (dir * 4), y - 65, 24, 28);
+                fill(0);
+                ellipse(x + (dir * 4) - 6, y - 67, 4, 4);
+                ellipse(x + (dir * 4) + 6, y - 67, 4, 4);
+            }
+            rect(gameChar_x - 32, gameChar_y - 55, 14, 45, 7);
+            rect(gameChar_x + 18, gameChar_y - 55, 14, 45, 7);
+            rect(gameChar_x - 15, gameChar_y - 12, 14, 15, 6);
+            rect(gameChar_x + 1, gameChar_y - 12, 14, 15, 6);
+        } else if (isLeft && isFalling) {
             fill(furColor);
             rect(gameChar_x - 18, gameChar_y - 60, 36, 45, 10);
-
-            // Head
             {
                 let x = gameChar_x;
                 let y = gameChar_y;
@@ -694,29 +716,21 @@ function draw() {
                 ellipse(x + (dir * 4) - 6, y - 67, 4, 4);
                 ellipse(x + (dir * 4) + 6, y - 67, 4, 4);
             }
-
-            // Arms/Legs for Jump Left
             push();
             translate(gameChar_x - 15, gameChar_y - 50);
             rotate(-2.5);
             rect(0, 0, 12, 35, 6);
             pop();
-
             push();
             translate(gameChar_x + 10, gameChar_y - 50);
             rotate(0.5);
             rect(0, 0, 12, 35, 6);
             pop();
-
             rect(gameChar_x - 15, gameChar_y - 25, 14, 14, 7);
             rect(gameChar_x + 2, gameChar_y - 20, 14, 14, 7);
-
         } else if (isRight && isFalling) {
-            // Jumping Right
             fill(furColor);
             rect(gameChar_x - 18, gameChar_y - 60, 36, 45, 10);
-            
-            // Head
             {
                 let x = gameChar_x;
                 let y = gameChar_y;
@@ -729,45 +743,34 @@ function draw() {
                 ellipse(x + (dir * 4) - 6, y - 67, 4, 4);
                 ellipse(x + (dir * 4) + 6, y - 67, 4, 4);
             }
-
-            // Arms/Legs for Jump Right
             push();
             translate(gameChar_x + 15, gameChar_y - 50);
             rotate(2.5);
             rect(-12, 0, 12, 35, 6);
             pop();
-
             push();
             translate(gameChar_x - 10, gameChar_y - 50);
             rotate(-0.5);
             rect(-12, 0, 12, 35, 6);
             pop();
-
             rect(gameChar_x - 15, gameChar_y - 20, 14, 14, 7);
             rect(gameChar_x + 2, gameChar_y - 25, 14, 14, 7);
-
         } else if (isLeft) {
-            // Walking Left
             fill(furColor);
-
             push();
             translate(gameChar_x + 5, gameChar_y - 20);
             rotate(0.4);
             rect(-6, 0, 12, 25, 6);
             pop();
-
             push();
             translate(gameChar_x, gameChar_y);
             rotate(-0.1);
             rect(-18, -60, 36, 45, 10);
             pop();
-
-            // Head
             {
                 let x = gameChar_x - 4;
                 let y = gameChar_y;
                 let dir = -1;
-
                 fill(furColor);
                 ellipse(x, y - 65, 40, 45);
                 fill(skinColor);
@@ -776,41 +779,32 @@ function draw() {
                 ellipse(x + (dir * 4) - 6, y - 67, 4, 4);
                 ellipse(x + (dir * 4) + 6, y - 67, 4, 4);
             }
-
             push();
             translate(gameChar_x - 5, gameChar_y - 20);
             rotate(-0.4);
             rect(-6, 0, 12, 25, 6);
             pop();
-
             push();
             translate(gameChar_x, gameChar_y - 50);
             rotate(0.5);
             rect(-6, 0, 12, 40, 6);
             pop();
-
         } else if (isRight) {
-            // Walking Right
             fill(furColor);
-
             push();
             translate(gameChar_x - 5, gameChar_y - 20);
             rotate(-0.4);
             rect(-6, 0, 12, 25, 6);
             pop();
-
             push();
             translate(gameChar_x, gameChar_y);
             rotate(0.1);
             rect(-18, -60, 36, 45, 10);
             pop();
-
-            // Head
             {
                 let x = gameChar_x + 4;
                 let y = gameChar_y;
                 let dir = 1;
-
                 fill(furColor);
                 ellipse(x, y - 65, 40, 45);
                 fill(skinColor);
@@ -819,30 +813,23 @@ function draw() {
                 ellipse(x + (dir * 4) - 6, y - 67, 4, 4);
                 ellipse(x + (dir * 4) + 6, y - 67, 4, 4);
             }
-
             push();
             translate(gameChar_x + 5, gameChar_y - 20);
             rotate(0.4);
             rect(-6, 0, 12, 25, 6);
             pop();
-
             push();
             translate(gameChar_x, gameChar_y - 50);
             rotate(-0.5);
             rect(-6, 0, 12, 40, 6);
             pop();
-
         } else if (isFalling || isPlummeting) {
-            // Falling Straight
             fill(furColor);
             rect(gameChar_x - 18, gameChar_y - 60, 36, 45, 10);
-
-            // Head
             {
                 let x = gameChar_x;
                 let y = gameChar_y;
                 let dir = 0;
-
                 fill(furColor);
                 ellipse(x, y - 65, 40, 45);
                 fill(skinColor);
@@ -851,25 +838,19 @@ function draw() {
                 ellipse(x + (dir * 4) - 6, y - 67, 4, 4);
                 ellipse(x + (dir * 4) + 6, y - 67, 4, 4);
             }
-
             fill(0);
             ellipse(gameChar_x, gameChar_y - 58, 8, 10);
             rect(gameChar_x - 30, gameChar_y - 65, 12, 40, 6);
             rect(gameChar_x + 18, gameChar_y - 65, 12, 40, 6);
             rect(gameChar_x - 15, gameChar_y - 20, 12, 15, 6);
             rect(gameChar_x + 3, gameChar_y - 20, 12, 15, 6);
-
         } else {
-            // Standing Still
             fill(furColor);
             rect(gameChar_x - 20, gameChar_y - 60, 40, 50, 12);
-
-            // Head
             {
                 let x = gameChar_x;
                 let y = gameChar_y;
                 let dir = 0;
-
                 fill(furColor);
                 ellipse(x, y - 65, 40, 45);
                 fill(skinColor);
@@ -878,7 +859,6 @@ function draw() {
                 ellipse(x + (dir * 4) - 6, y - 67, 4, 4);
                 ellipse(x + (dir * 4) + 6, y - 67, 4, 4);
             }
-
             rect(gameChar_x - 32, gameChar_y - 55, 14, 45, 7);
             rect(gameChar_x + 18, gameChar_y - 55, 14, 45, 7);
             rect(gameChar_x - 15, gameChar_y - 12, 14, 15, 6);
@@ -886,7 +866,6 @@ function draw() {
         }
     }
 
-    //Physics Update
     if (!isHibernating) {
         if (gameChar_y < floorPos_y) {
             gameChar_y += 2;
@@ -894,22 +873,17 @@ function draw() {
         } else {
             isFalling = false;
         }
-
         if (gameChar_x < -2000 || gameChar_x > 3000) {
             isPlummeting = true;
         }
-
         if (isPlummeting == true) {
             gameChar_y += 5;
         }
     }
 
-    //Interaction Prompts (Thoughts)
     let isNearCave = false;
-
     if (cave) {
         let center = cave.x_pos + cave.width / 2;
-
         if (abs(gameChar_x - center) < cave.width / 2 + 40 && abs(gameChar_y - floorPos_y) < 40) {
             isNearCave = true;
         }
@@ -919,24 +893,19 @@ function draw() {
         let x = gameChar_x;
         let y = gameChar_y - 120;
         let message = "i need to sleep";
-        
         push();
         textSize(16);
-
         let padding = 12;
         let bubbleWidth = max(textWidth(message) + padding * 2, 120);
         let bubbleHeight = 50;
         let bubbleX = x - bubbleWidth / 2;
         let bubbleY = y - bubbleHeight;
-
         stroke(40);
         strokeWeight(2);
         fill(255);
         rect(bubbleX, bubbleY, bubbleWidth, bubbleHeight, 18);
-
         triangle(x - 12, bubbleY + bubbleHeight, x - 4, bubbleY + bubbleHeight + 12, x, bubbleY + bubbleHeight);
         triangle(x + 12, bubbleY + bubbleHeight, x + 4, bubbleY + bubbleHeight + 12, x, bubbleY + bubbleHeight);
-
         noStroke();
         fill(30);
         textAlign(LEFT, CENTER);
@@ -944,35 +913,28 @@ function draw() {
         pop();
     }
 
-    pop(); // End world scaling
+    pop();
 
-    //Game Over Screen
     if (gameChar_y > ORIGINAL_HEIGHT) {
         fill(40, 0, 0, 200);
         rect(0, 0, width, height);
-
         fill(0, 0, 0, 220);
         stroke(200, 0, 0);
         strokeWeight(4);
         rectMode(CENTER);
         rect(width / 2, height / 2, 400, 200, 20);
         rectMode(CORNER);
-
         textAlign(CENTER, CENTER);
         textSize(50);
         textStyle(BOLD);
-
         noStroke();
         fill(0, 0, 0);
         text("GAME OVER", width / 2 + 3, height / 2 - 20 + 3);
-
         fill(255, 50, 50);
         text("GAME OVER", width / 2, height / 2 - 20);
-
         textSize(20);
         textStyle(NORMAL);
         fill(255);
-
         if (frameCount % 60 < 40) {
             text("Press SPACE to Respawn", width / 2, height / 2 + 50);
         }
@@ -988,13 +950,11 @@ function keyPressed() {
     
     if (cave) {
         let center = cave.x_pos + cave.width / 2;
-
         if (abs(gameChar_x - center) < cave.width / 2 + 40 && abs(gameChar_y - floorPos_y) < 40) {
             isNearCave = true;
         }
     }
 
-    // Interact (Sleep)
     if (key === 'W' || key === 'w') {
         if (isHibernating) {
             isHibernating = false;
@@ -1008,13 +968,10 @@ function keyPressed() {
         return;
     }
 
-    // Cycle Season Forward
     if (key === 'T' || key === 't') {
         currentSeasonIndex = (currentSeasonIndex + 1 + seasons.length) % seasons.length;
         seasonTime = 0;
-
         let seasonForCycle = seasons[currentSeasonIndex] || seasons[0];
-
         if (seasonForCycle.name === "Summer" && isHibernating) {
             isHibernating = false;
             hibernationTimer = 0;
@@ -1022,13 +979,10 @@ function keyPressed() {
         return;
     }
 
-    // Cycle Season Backward
     if (key === 'R' || key === 'r') {
         currentSeasonIndex = (currentSeasonIndex - 1 + seasons.length) % seasons.length;
         seasonTime = 0;
-
         let seasonForCycle = seasons[currentSeasonIndex] || seasons[0];
-
         if (seasonForCycle.name === "Summer" && isHibernating) {
             isHibernating = false;
             hibernationTimer = 0;
@@ -1036,7 +990,6 @@ function keyPressed() {
         return;
     }
 
-    // Respawn Logic
     if (gameChar_y > ORIGINAL_HEIGHT) {
         if (keyCode == 32) {
             gameChar_x = 100;
@@ -1046,7 +999,10 @@ function keyPressed() {
             isLeft = false;
             isRight = false;
             
-            // Regenerate World (Trees)
+            for (var i = 0; i < collectables.length; i++) {
+                collectables[i].isFound = false;
+            }
+            
             trees = [];
             const CAVE_CLEARANCE = 220;
 
@@ -1060,8 +1016,11 @@ function keyPressed() {
                     tx = random(-2000, 2900);
                     validPosition = true;
 
-                    if (tx > canyon.x_pos - 80 && tx < canyon.x_pos + canyon.width + 80) {
-                        validPosition = false;
+                    for (var c = 0; c < canyons.length; c++) {
+                        if (tx > canyons[c].x_pos - 80 && tx < canyons[c].x_pos + canyons[c].width + 80) {
+                            validPosition = false;
+                            break;
+                        }
                     }
 
                     if (cave) {
@@ -1099,14 +1058,12 @@ function keyPressed() {
                 }
             }
 
-            // Regenerate Mountains
             mountains = [];
             for (var i = 0; i < 15; i++) {
                 var tw = random(200, 500);
                 var th = random(200, 450);
                 var tx = random(-2000, 3000 - tw);
                 var tc = random(80, 180);
-
                 mountains.push({x: tx, width: tw, height: th, color: tc});
             }
         }
@@ -1115,10 +1072,25 @@ function keyPressed() {
 
     if (isPlummeting) { return; }
 
-    // Jump
     if (keyCode == 32) {
         if (!isFalling && !isPlummeting) {
             gameChar_y -= 100;
         }
+    }
+
+    if (keyCode == 37 || key == 'a' || key == 'A') {
+        isLeft = true;
+    }
+    if (keyCode == 39 || key == 'd' || key == 'D') {
+        isRight = true;
+    }
+}
+
+function keyReleased() {
+    if (keyCode == 37 || key == 'a' || key == 'A') {
+        isLeft = false;
+    }
+    if (keyCode == 39 || key == 'd' || key == 'D') {
+        isRight = false;
     }
 }
