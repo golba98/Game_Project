@@ -31,10 +31,46 @@ var timeOfDay = 0;
 var cycleSpeed = 1;
 
 const seasonSpecs = [
-    { name: "Spring", sky: [170, 220, 255], ground: [150, 215, 165], grass: [60, 190, 100], leaf: [120, 200, 140], leafStyle: "bloom" },
-    { name: "Summer", sky: [190, 230, 255], ground: [130, 200, 140], grass: [40, 160, 70], leaf: [90, 190, 120], leafStyle: "lush" },
-    { name: "Autumn", sky: [220, 180, 170], ground: [180, 140, 90], grass: [140, 120, 60], leaf: [200, 120, 80], leafStyle: "crisp" },
-    { name: "Winter", sky: [160, 190, 220], ground: [200, 210, 230], grass: [200, 210, 230], leaf: [200, 220, 240], leafStyle: "bare" }
+    { 
+        name: "Spring", 
+        sky: [170, 220, 255], 
+        ground: [150, 215, 165], 
+        grass: [60, 190, 100], 
+        leaf: [120, 200, 140], 
+        leafStyle: "bloom",
+        weather: { type: 'rain', density: 50, speed: 6, wind: 1, color: [150, 150, 200] },
+        fog: { color: [255, 255, 255], alpha: 0 }
+    },
+    { 
+        name: "Summer", 
+        sky: [190, 230, 255], 
+        ground: [130, 200, 140], 
+        grass: [40, 160, 70], 
+        leaf: [90, 190, 120], 
+        leafStyle: "lush",
+        weather: { type: 'none', density: 0, speed: 0, wind: 0, color: [0, 0, 0] },
+        fog: { color: [255, 255, 255], alpha: 0 }
+    },
+    { 
+        name: "Autumn", 
+        sky: [220, 180, 170], 
+        ground: [180, 140, 90], 
+        grass: [140, 120, 60], 
+        leaf: [200, 120, 80], 
+        leafStyle: "crisp",
+        weather: { type: 'rain', density: 120, speed: 9, wind: 3, color: [100, 100, 140] },
+        fog: { color: [200, 200, 220], alpha: 30 }
+    },
+    { 
+        name: "Winter", 
+        sky: [160, 190, 220], 
+        ground: [200, 210, 230], 
+        grass: [200, 210, 230], 
+        leaf: [200, 220, 240], 
+        leafStyle: "bare",
+        weather: { type: 'snow', density: 150, speed: 2, wind: 0.5, color: [255, 255, 255] },
+        fog: { color: [220, 230, 240], alpha: 100 }
+    }
 ];
 
 var seasons = [];
@@ -42,6 +78,23 @@ var currentSeasonIndex = 0;
 var seasonTime = 0;
 const SEASON_DURATION = 720;
 
+var weatherParticles = [];
+
+var game_score;
+var flagpole;
+var lives;
+
+var gameFont;
+
+// QoL Variables
+var cameraPosX = 0;
+var dustParticles = [];
+var tutorialAlpha = 255;
+var totalCollectables = 5; // Matches generateCollectables count
+
+function preload() {
+    gameFont = loadFont('assets/font.ttf');
+}
 
 function setup() {
     createCanvas(windowWidth, windowHeight);
@@ -50,13 +103,35 @@ function setup() {
     document.body.style.overflow = "hidden";
     document.body.style.margin = "0";
     document.body.style.padding = "0";
+    
+    // Set global font
+    textFont(gameFont);
 
     // 2. Initialize Game Constants & Characters
     furColor = color(70, 45, 20);
     skinColor = color(180, 140, 110);
     floorPos_y = 450;
+    
+    lives = 3;
+    startGame();
+}
+
+function startGame() {
     gameChar_x = 100;
     gameChar_y = floorPos_y;
+    cameraPosX = 0; // Reset camera
+    tutorialAlpha = 255; // Reset tutorial
+
+    // Reset Game State
+    game_score = 0;
+    flagpole = { isReached: false, x_pos: 2800, height: 0 };
+    
+    // Reset Physics State
+    isLeft = false;
+    isRight = false;
+    isFalling = false;
+    isPlummeting = false;
+    isHibernating = false;
 
     // 3. Generate World Elements (Order matters for collision checks)
     generateCanyons();      // Must be first (others check against this)
@@ -66,6 +141,8 @@ function setup() {
     generateTrees();        // Checks canyons and cave
     generateMountains();    // Decoration (background)
     generateClouds();       // Decoration (sky)
+    
+    totalCollectables = collectables.length;
 }
 
 function generateCanyons() {
@@ -290,7 +367,10 @@ function drawSingleMountain(m) {
     triangle(peakX, baseY, peakX, peakY, baseX + mWidth, baseY);
 
     // 3. Draw Snow Cap
-    let capScale = 0.2;
+    let currentSpec = seasonSpecs[currentSeasonIndex];
+    let isWinter = currentSpec.name === "Winter";
+    let capScale = isWinter ? 0.6 : 0.2; // Massive snow cap in winter
+    
     let capH = mHeight * capScale;
     let capW = mWidth * capScale;
     let capBottomY = peakY + capH;
@@ -554,6 +634,7 @@ function checkCollectable(collectable_object) {
     if (collectable_object.isFound == false) {
         if (dist(gameChar_x, gameChar_y, collectable_object.x_pos, collectable_object.y_pos) < 50) {
             collectable_object.isFound = true;
+            game_score += 1;
             console.log("Coin Collected!");
         }
     }
@@ -585,8 +666,10 @@ function draw() {
     push();
     scale(scaleX, scaleY);
     
-    // Camera Logic
-    var cameraPosX = gameChar_x - ORIGINAL_WIDTH / 2;
+    // Camera Logic (Smooth Lerp)
+    let targetCameraX = gameChar_x - ORIGINAL_WIDTH / 2;
+    cameraPosX = lerp(cameraPosX, targetCameraX, 0.1);
+    
     translate(-cameraPosX, 0);
 
     // Draw Static World Elements
@@ -610,16 +693,51 @@ function draw() {
         checkCollectable(collectables[i]);
     }
 
+    // Draw Dust (Before Character)
+    updateAndDrawDust();
+
     // Handle Character (Movement & Drawing)
     processCharacter();
 
     // Draw In-Game UI (Speech bubbles, etc)
     drawCharacterStatusUI();
+    
+    renderFlagpole();
 
     pop(); // End Camera Transform
+    
+    // Draw Weather (Screen Space)
+    updateWeather();
+    drawFog();
 
-    // 5. HUD & Overlays (Drawn on top of everything)
-    drawGameOverScreen();
+    // 5. HUD & Overlays
+    drawHUD();
+
+    // Game Over / Level Complete Logic
+    if (lives < 1) {
+        fill(0, 0, 0, 200);
+        rect(0, 0, width, height);
+        textAlign(CENTER, CENTER);
+        fill(255);
+        textSize(40);
+        text("Game Over. Press Space to Restart.", width/2, height/2);
+        return;
+    }
+
+    if (flagpole.isReached && flagpole.height >= 200) {
+        fill(0, 0, 0, 100);
+        rect(0, 0, width, height);
+        textAlign(CENTER, CENTER);
+        fill(255);
+        textSize(40);
+        text("Level Complete. Press Space to Restart.", width/2, height/2);
+        return;
+    }
+    
+    checkPlayerDie();
+    if (!flagpole.isReached) {
+        checkFlagpole();
+    }
     
     // Animation tick
     coinAngle += 0.05;
@@ -849,6 +967,10 @@ function processCharacter() {
             gameChar_y += 2;
             isFalling = true;
         } else {
+            // Just landed?
+            if (isFalling) {
+                createDust(gameChar_x, floorPos_y);
+            }
             isFalling = false;
         }
         if (gameChar_x < -2000 || gameChar_x > 3000) {
@@ -1039,43 +1161,26 @@ function drawCharacterStatusUI() {
     }
 }
 
-function drawGameOverScreen() {
-    if (gameChar_y > ORIGINAL_HEIGHT) {
-        fill(40, 0, 0, 200);
-        rect(0, 0, width, height);
-        
-        fill(0, 0, 0, 220);
-        stroke(200, 0, 0);
-        strokeWeight(4);
-        rectMode(CENTER);
-        rect(width / 2, height / 2, 400, 200, 20);
-        
-        rectMode(CORNER);
-        textAlign(CENTER, CENTER);
-        textSize(50);
-        textStyle(BOLD);
-        noStroke();
-        
-        fill(0, 0, 0);
-        text("GAME OVER", width / 2 + 3, height / 2 - 20 + 3);
-        fill(255, 50, 50);
-        text("GAME OVER", width / 2, height / 2 - 20);
-        
-        textSize(20);
-        textStyle(NORMAL);
-        fill(255);
-        if (frameCount % 60 < 40) {
-            text("Press SPACE to Respawn", width / 2, height / 2 + 50);
-        }
-    }
-}
+
 
 
 function keyPressed() {
-    // 1. Handle Respawn (High Priority)
-    if (gameChar_y > ORIGINAL_HEIGHT) {
+    // 1. Handle Game Over / Level Complete / Respawn
+    if (lives < 1 || (flagpole.isReached && flagpole.height >= 200)) {
         if (keyCode == 32) {
-            respawnCharacter();
+            setup(); // Full Restart
+            return;
+        }
+    }
+    
+    if (gameChar_y > height) {
+        if (keyCode == 32) {
+            if (lives > 0) {
+                lives -= 1;
+                if (lives > 0) {
+                    respawnCharacter();
+                }
+            }
         }
         return; 
     }
@@ -1100,27 +1205,17 @@ function keyPressed() {
     }
 
     // 3. Handle Movement Controls
-    // (Prevents movement if character is falling/plummeting)
     handleMovementInput();
 }
 
 function respawnCharacter() {
-    // Reset Character
+    // Reset Character Position Only
     gameChar_x = 100;
     gameChar_y = floorPos_y;
     isPlummeting = false;
     isFalling = false;
     isLeft = false;
     isRight = false;
-    
-    // Reset World Elements
-    for (var i = 0; i < collectables.length; i++) {
-        collectables[i].isFound = false;
-    }
-    
-    // Regenerate World (Using helpers from Setup)
-    generateTrees();
-    generateMountains();
 }
 
 function toggleHibernation() {
@@ -1164,12 +1259,13 @@ function changeSeason(direction) {
 }
 
 function handleMovementInput() {
-    if (isPlummeting) { return; }
+    if (isPlummeting || isHibernating) { return; }
 
     // Jump
     if (keyCode == 32) {
         if (!isFalling && !isPlummeting) {
             gameChar_y -= 100;
+            createDust(gameChar_x, floorPos_y);
         }
     }
 
@@ -1193,5 +1289,228 @@ function keyReleased() {
     // Stop moving Right
     if (keyCode == 39 || key == 'd' || key == 'D') {
         isRight = false;
+    }
+}
+
+function renderFlagpole() {
+    push();
+    
+    // Pole
+    strokeWeight(4);
+    stroke(100);
+    line(flagpole.x_pos, floorPos_y, flagpole.x_pos, floorPos_y - 250);
+    
+    // Base
+    noStroke();
+    fill(80);
+    arc(flagpole.x_pos, floorPos_y, 40, 20, PI, TWO_PI);
+    
+    // Knob at top
+    fill(255, 215, 0); // Gold
+    ellipse(flagpole.x_pos, floorPos_y - 250, 10, 10);
+
+    // Flag Animation Logic
+    if (flagpole.isReached) {
+        if (flagpole.height < 200) {
+            flagpole.height += 4; // Rise speed
+        }
+    } else {
+        flagpole.height = 0;
+    }
+
+    let currentFlagY = floorPos_y - 50 - flagpole.height;
+    let waveOffset = flagpole.isReached ? frameCount * 0.1 : 0;
+
+    // Draw Flag (Waving)
+    fill(255, 50, 50);
+    beginShape();
+    vertex(flagpole.x_pos, currentFlagY);
+    
+    // Create wave effect for the top edge
+    for (let i = 0; i <= 60; i += 5) {
+        let yWave = sin(waveOffset + i * 0.1) * 5;
+        vertex(flagpole.x_pos + i, currentFlagY + yWave + 10);
+    }
+    
+    // Create wave effect for the bottom edge
+    for (let i = 60; i >= 0; i -= 5) {
+        let yWave = sin(waveOffset + i * 0.1) * 5;
+        vertex(flagpole.x_pos + i, currentFlagY + 40 + yWave);
+    }
+    
+    vertex(flagpole.x_pos, currentFlagY + 40);
+    endShape(CLOSE);
+
+    pop();
+}
+
+function checkFlagpole() {
+    var d = abs(gameChar_x - flagpole.x_pos);
+    if (d < 15) {
+        flagpole.isReached = true;
+    }
+}
+
+function checkPlayerDie() {
+    if (gameChar_y > height) {
+        if (lives > 0) {
+            // Player has fallen but has lives
+            fill(0, 0, 0, 200);
+            rect(0, 0, width, height);
+            
+            textAlign(CENTER, CENTER);
+            textSize(30);
+            fill(255);
+            text("You Died!", width/2, height/2 - 40);
+            textSize(20);
+            text("Press Space to Continue. Lives remaining: " + (lives - 1), width/2, height/2 + 20);
+        }
+    }
+}
+
+function updateWeather() {
+    let currentSeason = seasonSpecs[currentSeasonIndex]; // Use specs directly for weather config
+    let w = currentSeason.weather;
+
+    if (w.type === 'none') {
+        weatherParticles = [];
+        return;
+    }
+
+    // 1. Maintain Particle Count
+    while (weatherParticles.length < w.density) {
+        weatherParticles.push({
+            x: random(width),
+            y: random(-height, 0), // Spawn above screen
+            z: random(0.5, 2),     // Depth scale
+            len: random(10, 20)    // Rain length
+        });
+    }
+    
+    // Trim excess
+    if (weatherParticles.length > w.density) {
+        weatherParticles.splice(w.density);
+    }
+
+    // 2. Update and Draw
+    let c = color(w.color[0], w.color[1], w.color[2]);
+    stroke(c);
+    fill(c);
+
+    for (let i = 0; i < weatherParticles.length; i++) {
+        let p = weatherParticles[i];
+
+        // Update Physics
+        p.y += w.speed * p.z;
+        p.x += w.wind * p.z;
+        
+        // Simulating Camera movement effect (Screen space)
+        if (isLeft) p.x += 1;
+        if (isRight) p.x -= 1;
+
+        // Wrap around
+        if (p.y > height) {
+            p.y = random(-50, 0);
+            p.x = random(width);
+        }
+        if (p.x > width) p.x = 0;
+        if (p.x < 0) p.x = width;
+
+        // Draw
+        if (w.type === 'rain') {
+            strokeWeight(1 * p.z);
+            line(p.x, p.y, p.x - w.wind * 2, p.y + p.len * p.z);
+        } else if (w.type === 'snow') {
+            noStroke();
+            let size = 4 * p.z;
+            ellipse(p.x, p.y, size, size);
+        }
+    }
+}
+
+function drawFog() {
+    let currentSeason = seasonSpecs[currentSeasonIndex];
+    let fog = currentSeason.fog;
+    
+    if (fog && fog.alpha > 0) {
+        noStroke();
+        fill(fog.color[0], fog.color[1], fog.color[2], fog.alpha);
+        rect(0, 0, width, height);
+    }
+}
+
+function drawHUD() {
+    // 1. Draw Lives (Hearts)
+    for (let i = 0; i < lives; i++) {
+        let x = 30 + i * 40;
+        let y = 40;
+        fill(255, 50, 50);
+        noStroke();
+        beginShape();
+        vertex(x, y);
+        bezierVertex(x - 15, y - 15, x - 30, y + 10, x, y + 25);
+        bezierVertex(x + 30, y + 10, x + 15, y - 15, x, y);
+        endShape(CLOSE);
+        
+        // Shine
+        fill(255, 150, 150);
+        ellipse(x - 8, y - 5, 6, 6);
+    }
+
+    // 2. Draw Score
+    fill(255, 215, 0);
+    stroke(0);
+    strokeWeight(3);
+    textSize(24);
+    textAlign(LEFT, TOP);
+    text("Coins: " + game_score + " / " + totalCollectables, 20, 70);
+    noStroke();
+    
+    // 3. Draw Tutorial (Fading)
+    if (tutorialAlpha > 0) {
+        fill(255, 255, 255, tutorialAlpha);
+        stroke(0, tutorialAlpha);
+        strokeWeight(4);
+        textAlign(CENTER, CENTER);
+        textSize(40);
+        text("ARROWS / WASD to Move", width / 2, height / 2 - 100);
+        text("SPACE to Jump", width / 2, height / 2 - 50);
+        noStroke();
+        
+        // Fade out if moving
+        if (isLeft || isRight || isFalling) {
+            tutorialAlpha -= 2;
+        }
+    }
+}
+
+function createDust(x, y) {
+    for (let i = 0; i < 5; i++) {
+        dustParticles.push({
+            x: x + random(-10, 10),
+            y: y + random(-5, 5),
+            size: random(5, 10),
+            alpha: 200,
+            vx: random(-1, 1),
+            vy: random(-0.5, -2)
+        });
+    }
+}
+
+function updateAndDrawDust() {
+    noStroke();
+    for (let i = dustParticles.length - 1; i >= 0; i--) {
+        let p = dustParticles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.alpha -= 5;
+        p.size *= 0.95;
+        
+        fill(200, 200, 200, p.alpha);
+        ellipse(p.x, p.y, p.size);
+        
+        if (p.alpha <= 0) {
+            dustParticles.splice(i, 1);
+        }
     }
 }
