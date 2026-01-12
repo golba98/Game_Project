@@ -1,101 +1,75 @@
 BIGFOOT ADVENTURE
 =================
 
-A 2D side-scrolling platformer by Jordan Vorster.
-Explore a procedurally generated landscape, collect coins, and avoid hazards.
+A dynamic 2D side-scrolling platformer created by Jordan Vorster using p5.js.
+Explore a living, procedurally generated world that changes with the seasons. Collect coins, brave the elements, and find your way home.
 
+**[Play Online](index.html)** (Open index.html in a browser)
 
-PROJECT CHECKLIST
------------------
+## 🎮 Controls
 
-### Part 1: Scenery Drawing
-- [x] Use p5 drawing functions (`rect`, `ellipse`, `triangle`, `line`)
-- [x] Draw scenery items next to text titles (Trees, Mountains, Clouds)
-- [x] Use simple shapes (under 15 lines per item)
+| Action | Key(s) |
+| :--- | :--- |
+| **Move Left** | `Left Arrow` or `A` |
+| **Move Right** | `Right Arrow` or `D` |
+| **Jump** | `Spacebar` |
+| **Hibernate** | `W` (When near cave in Winter) |
+| **Cycle Seasons** | `T` (Next) / `R` (Previous) |
+| **Respawn** | `Spacebar` (After death) |
 
-### Part 2: Variables & Objects
-- [x] **Moveable Game Character:** Character drawn with variables (`gameChar_x`, `gameChar_y`)
-- [x] **Trees:** Implemented using arrays and objects
-- [x] **Canyon:** Implemented using objects
-- [x] **Collectable Item:** Implemented using objects
-- [x] **Mountains & Clouds:** Implemented using arrays and objects
+---
 
-### Part 3: Interaction
-- [x] **Variables:** `isLeft`, `isRight`, `isFalling`, `isPlummeting` created
-- [x] **Key Handling:** `keyPressed` and `keyReleased` implemented for Left/Right
-- [x] **Character Animation:** Character changes appearance based on movement state
-- [x] **Movement:** Character moves left/right when keys are pressed
-- [x] **Jumping:** Character jumps when Spacebar is pressed
-- [x] **Gravity:** Character falls when in the air
-- [x] **Double Jump Prevention:** Cannot jump while already falling
+## ✨ Key Features
 
-### Part 4: Side Scrolling
-- [x] **Camera System:** World translates based on character position (`translate(-cameraPosX, 0)`)
-- [x] **Center Locking:** Character remains in the center of the screen
-- [x] **Background:** Sky and UI elements remain fixed while world moves
+### 🌍 Dynamic Environment
+*   **4 Distinct Seasons:** The world transforms visually and mechanically.
+    *   **Spring:** Blooming pink trees and light showers.
+    *   **Summer:** Lush green foliage and clear sunny skies.
+    *   **Autumn:** Orange leaves fall from trees, accompanied by heavy rain and wind.
+    *   **Winter:** Trees go bare, heavy snow falls, and fog rolls in.
+*   **Day/Night Cycle:** Watch the sun set and moon rise, changing the sky gradient and lighting.
+*   **Procedural Weather:** Rain and snow are generated with a particle system that reacts to wind and camera movement.
 
+### 🐻 Character & Gameplay
+*   **Physics-Based Movement:** Smooth running and jumping with gravity.
+*   **Hibernation Mechanic:** In Winter, finding a cave allows the bear to sleep through the cold.
+*   **Lives System:** You start with 3 hearts. Falling into a canyon loses a life.
+*   **Collectables:** Find all 5 gold coins hidden throughout the level.
+*   **Victory Condition:** Reach the flagpole at the end of the level to raise the flag and win.
 
-HOW TO PLAY
------------
-Open `index.html` in your web browser (with `p5.js` present) to run the game.
+### 💅 Polish & "Game Juice"
+*   **Smooth Camera:** The camera follows the player with a smooth scrolling effect (lerp).
+*   **Particle Effects:** Dust kicks up when jumping or landing.
+*   **Visual Feedback:** Animated flag, HUD with hearts, and fading tutorial text.
+*   **Custom Assets:** Includes custom font for a cohesive aesthetic.
 
-CONTROLS
-- Move Left:   Left Arrow or `A`
-- Move Right:  Right Arrow or `D`
-- Jump:        Spacebar
-- Hibernation / Interact: `W` (use near the winter cave entrance)
-- Cycle Seasons: `T` (forward) / `R` (backward)
-- Respawn:     Spacebar (press when Game Over screen appears)
+---
 
-OBJECTIVE
-- Run and jump to navigate the world.
-- Collect gold coins to increase score.
-- Avoid canyons and falling off the world.
+## 🛠️ Technical Details
 
+### Project Structure
+*   `index.html`: The entry point for the web page.
+*   `sketch.js`: Contains all game logic, drawing code, and state management.
+*   `p5.js`: The graphics library used for rendering.
+*   `assets/`: Contains external resources like fonts.
 
-FEATURES (New additions)
-------------------------
-- Dynamic Day / Night Cycle: The sky, sun and moon transition over time.
-- Seasonal System: Four seasons (Spring, Summer, Autumn, Winter) change palettes and foliage.
-- Seasonal Trees: Tree canopies and colors update per season; Autumn has falling leaf particles.
-- Procedural Cave: A winter-only cave is generated randomly each run; trees avoid spawning near it.
-- Hibernation Mechanic: In Winter, approach the cave and press `W` to hibernate. While hibernating:
-	- The player lies down inside the cave (sleeping pose) and cannot move.
-	- A thought bubble (`i need to sleep`) appears near the character when close to the cave.
-	- Hibernation automatically ends when the season becomes Summer (or press `W` again to wake).
-- Sleeping Frame: A simple sleeping pose and on-screen "Zzz" indicate hibernation state.
+### Implementation Highlights
+*   **State Management:** Game states (Play, GameOver, LevelComplete) are managed via flags and conditional rendering.
+*   **Procedural Generation:** Mountains, trees, clouds, and canyons are randomly placed at the start of each run, ensuring a unique experience.
+*   **Object-Oriented Design:** Game entities (Clouds, Particles, Canyons) are structured as objects with properties for cleaner code.
+*   **Vector Math:** Used for particle physics and weather simulation.
 
- - Sleeping Character: The sleeping pose reuses the main character shapes (head, body, limbs) arranged horizontally
-	 so the character lies on the cave floor while hibernating. The sleeping sprite is shown in-place of the standing
-	 sprite during hibernation; it includes small "Zzz" markers and keeps the same palette so the character remains
-	 visually consistent with the active sprite.
+---
 
+## 🚀 Installation & Running
 
-FEATURES (Existing)
--------------------
-- Procedural Generation: Trees and mountains are randomized each run.
-- Physics: Gravity, jumping, and collision detection.
-- Camera: Side-scrolling view that follows the player.
-- Parallax Background: Clouds and layers move for depth.
+1.  Ensure you have `index.html`, `sketch.js`, `p5.js`, and the `assets` folder in the same directory.
+2.  Open `index.html` in any modern web browser (Chrome, Firefox, Edge, Safari).
+3.  Enjoy!
 
+---
 
-NOTES / IMPLEMENTATION DETAILS
-- Cave Placement & Clearance: Trees are prevented from spawning within a buffer around the cave so the entrance remains clear.
-- Cave Art: The cave entrance is drawn as a single semicircular opening with shaded interior for depth.
-- Hibernation Keys: `W` toggles hibernation only when near the cave during Winter; `Space` remains jump/respawn.
+## 👨‍💻 Credits
 
- - Sleeping implementation: The sleeping sprite is drawn by the same `sketch.js` renderer and positioned at the cave
-	 entrance (center). Trees are prevented from spawning near the cave so the sleeping area stays clear. Hibernation
-	 blocks player input while active and the game will automatically wake the player when the season advances to Summer.
-
-
-INSTALLATION
-------------
-1. Keep `index.html`, `sketch.js`, and `p5.js` in the same folder.
-2. Open `index.html` in a modern browser to play.
-
-
-CREDITS
--------
-Created by: Jordan Vorster
-Built with: JavaScript and p5.js
+**Created by:** Jordan Vorster
+**Built with:** [p5.js](https://p5js.org/)
