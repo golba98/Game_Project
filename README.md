@@ -5,6 +5,36 @@ A 2D side-scrolling platformer by Jordan Vorster.
 Explore a procedurally generated landscape, collect coins, and avoid hazards.
 
 
+PROJECT CHECKLIST
+-----------------
+
+### Part 1: Scenery Drawing
+- [x] Use p5 drawing functions (`rect`, `ellipse`, `triangle`, `line`)
+- [x] Draw scenery items next to text titles (Trees, Mountains, Clouds)
+- [x] Use simple shapes (under 15 lines per item)
+
+### Part 2: Variables & Objects
+- [x] **Moveable Game Character:** Character drawn with variables (`gameChar_x`, `gameChar_y`)
+- [x] **Trees:** Implemented using arrays and objects
+- [x] **Canyon:** Implemented using objects
+- [x] **Collectable Item:** Implemented using objects
+- [x] **Mountains & Clouds:** Implemented using arrays and objects
+
+### Part 3: Interaction
+- [x] **Variables:** `isLeft`, `isRight`, `isFalling`, `isPlummeting` created
+- [x] **Key Handling:** `keyPressed` and `keyReleased` implemented for Left/Right
+- [x] **Character Animation:** Character changes appearance based on movement state
+- [x] **Movement:** Character moves left/right when keys are pressed
+- [x] **Jumping:** Character jumps when Spacebar is pressed
+- [x] **Gravity:** Character falls when in the air
+- [x] **Double Jump Prevention:** Cannot jump while already falling
+
+### Part 4: Side Scrolling
+- [x] **Camera System:** World translates based on character position (`translate(-cameraPosX, 0)`)
+- [x] **Center Locking:** Character remains in the center of the screen
+- [x] **Background:** Sky and UI elements remain fixed while world moves
+
+
 HOW TO PLAY
 -----------
 Open `index.html` in your web browser (with `p5.js` present) to run the game.
