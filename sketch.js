@@ -214,6 +214,15 @@ function createPlatform(x, y, length, type = "static", range = 0, speed = 1) {
             if (this.isDead) return;
             this.update();
             
+            // GROUND SHADOW (tracks platform movement)
+            push();
+            let shadowAlpha = map(this.y, floorPos_y, 0, 40, 10);
+            let shadowScale = map(this.y, floorPos_y, 0, 1, 0.5);
+            fill(0, shadowAlpha);
+            noStroke();
+            ellipse(this.x + this.length/2, floorPos_y, this.length * shadowScale, 10);
+            pop();
+
             push();
             if (this.type === "crumbling" && this.isCrumbling) {
                 translate(random(-2, 2), 0); // Shake effect
@@ -307,8 +316,20 @@ function Enemy(x, y, range) {
         if (isCliffAhead) this.inc *= -1; else this.currentX = nextX;
     };
     this.draw = function() {
-        this.update(); push(); translate(this.currentX, this.y);
-        let hover = sin(frameCount * 0.15) * 5; translate(0, hover);
+        this.update(); 
+        
+        // GROUND SHADOW (Follows currentX, stays on floor)
+        push();
+        let hover = sin(frameCount * 0.15) * 5;
+        let shadowAlpha = map(hover, -5, 5, 40, 20);
+        let shadowScale = map(hover, -5, 5, 1.1, 0.9);
+        fill(0, shadowAlpha);
+        noStroke();
+        ellipse(this.currentX, this.y, 40 * shadowScale, 10);
+        pop();
+
+        push(); translate(this.currentX, this.y);
+        translate(0, hover);
         noStroke(); fill(150, 220, 255, 200); beginShape(); vertex(-20, 0); vertex(-25, -20); vertex(-10, -45); vertex(10, -45); vertex(25, -20); vertex(20, 0); endShape(CLOSE);
         fill(200, 240, 255, 150); triangle(-10, -45, 0, -10, 10, -45); triangle(-25, -20, 0, -10, -20, 0); triangle(25, -20, 0, -10, 20, 0);
         let eyePulse = 150 + sin(frameCount * 0.1) * 105; fill(0, eyePulse, 255); ellipse(-8, -30, 8, 8); ellipse(8, -30, 8, 8);
@@ -532,7 +553,25 @@ function generateMountains() {
 }
 
 function generateClouds() {
-    clouds = []; for (let i = 0; i < 14; i++) clouds.push({ x: random(-2000, 3000), y: random(60, 180), cloudSpeed: random(0.2, 1.2), color: color(random(220, 255), 200) });
+    clouds = []; 
+    for (let i = 0; i < 15; i++) {
+        let puffs = [];
+        let numPuffs = floor(random(3, 6));
+        for (let j = 0; j < numPuffs; j++) {
+            puffs.push({
+                ox: random(-40, 40),
+                oy: random(-20, 20),
+                size: random(40, 80)
+            });
+        }
+        clouds.push({ 
+            x: random(-2000, 3000), 
+            y: random(60, 180), 
+            puffs: puffs,
+            speed: random(0.2, 0.8),
+            bobOffset: random(TWO_PI)
+        });
+    }
 }
 
 function drawMountains() {
@@ -549,7 +588,24 @@ function drawMountains() {
 }
 
 function drawClouds() {
-    for (let c of clouds) { fill(c.color || color(255, 200)); noStroke(); ellipse(c.x, c.y, 80, 60); ellipse(c.x + 40, c.y, 100, 70); ellipse(c.x + 80, c.y, 80, 60); c.x += c.cloudSpeed; if (c.x > 4000) c.x = -800; }
+    for (let c of clouds) { 
+        let bob = sin(frameCount * 0.02 + c.bobOffset) * 5;
+        noStroke();
+        
+        // Draw each puff in the cloud
+        for (let p of c.puffs) {
+            // Main puff body
+            fill(255, 200);
+            ellipse(c.x + p.ox, c.y + p.oy + bob, p.size, p.size * 0.8);
+            
+            // Subtle highlight on top
+            fill(255, 255, 255, 150);
+            ellipse(c.x + p.ox, c.y + p.oy + bob - p.size * 0.1, p.size * 0.8, p.size * 0.4);
+        }
+        
+        c.x += c.speed; 
+        if (c.x > 4500) c.x = -1500; 
+    }
 }
 
 function drawTrees() {
