@@ -277,10 +277,6 @@ function createMushroom(x, y) {
             bezierVertex(5, -20, 10, -10, 8, 0);
             endShape(CLOSE);
             
-            // INNER CAP SHADOW (moves with cap)
-            fill(0, 40);
-            ellipse(0, -22 + bounce, 55 * squish, 12 / squish);
-            
             // Cap
             fill(220, 60, 60);
             arc(0, -25 + bounce, 70 * squish, 45 / squish, PI, TWO_PI, CHORD);
@@ -629,8 +625,8 @@ function drawCollectable(t) {
 function drawStoryObjects() {
     for (let obj of storyObjects) {
         if (obj.type === "camp") { push(); translate(obj.x, floorPos_y); fill(100, 120, 80); triangle(-40, 0, 0, -50, 40, 0); fill(80, 100, 60); triangle(-10, 0, 0, -50, 10, 0); pop(); }
-        else if (obj.type === "bridge") { push(); translate(obj.x, floorPos_y); stroke(80, 50, 20); strokeWeight(8); line(0, 0, 20, 40); line(obj.w, 0, obj.w - 20, 40); pop(); }
-        else if (obj.type === "footprint") { push(); translate(obj.x, floorPos_y + 5); fill(0, 30); noStroke(); ellipse(0, 0, 40, 60); pop(); }
+        else if (obj.type === "bridge") { push(); translate(obj.x, floorPos_y); stroke(80, 50, 20); strokeWeight(8); line(0, 0, 20, 40); line(obj.w, 0, obj.w - 20, 40); line(0, 0, obj.w, 0); pop(); }
+        else if (obj.type === "footprint") { push(); translate(obj.x, floorPos_y); fill(0, 30); noStroke(); ellipse(0, 0, 40, 10); pop(); }
     }
 }
 
