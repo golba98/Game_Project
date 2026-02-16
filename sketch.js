@@ -976,7 +976,11 @@ function processCharacter() {
         }
     }
     if (gameChar_x < -3000 || gameChar_x > 5000) isPlummeting = true; 
-    drawGameCharBody(); 
+    
+    // Only draw the active character body if not hibernating
+    if (!isHibernating) {
+        drawGameCharBody(); 
+    }
 }
 
 function drawGameCharBody() {
