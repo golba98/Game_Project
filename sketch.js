@@ -78,6 +78,7 @@ var storyObjects = [];
 // Extensions
 var platforms = [];
 var enemies = [];
+var mushrooms = [];
 var checkpoints = [];
 var lastCheckpoint = { x: 100, y: 450 };
 
@@ -187,23 +188,112 @@ const gravity = 0.6;
 const jumpPower = -15;
 
 // --- Extension 2: Platform Factory ---
-function createPlatform(x, y, length) {
+function createPlatform(x, y, length, type = "static", range = 0, speed = 1) {
     var p = {
-        x: x, y: y, length: length,
-        draw: function() {
-            fill(120, 100, 80); rect(this.x, this.y, this.length, 20, 5);
-            fill(150, 130, 100); rect(this.x, this.y, this.length, 5, 5);
-            stroke(80, 60, 40, 100); for(let i = 10; i < this.length; i += 30) line(this.x + i, this.y + 5, this.x + i, this.y + 15); noStroke();
+        x: x, y: y, originalX: x, originalY: y, length: length,
+        type: type, range: range, speed: speed, 
+        inc: speed, 
+        timer: 60, // For crumbling platforms
+        isCrumbling: false,
+        isDead: false,
+        
+        update: function() {
+            if (this.type === "moving") {
+                this.x += this.inc;
+                if (abs(this.x - this.originalX) > this.range) this.inc *= -1;
+            } else if (this.type === "moving_y") {
+                this.y += this.inc;
+                if (abs(this.y - this.originalY) > this.range) this.inc *= -1;
+            } else if (this.type === "crumbling" && this.isCrumbling) {
+                this.timer--;
+                if (this.timer <= 0) this.isDead = true;
+            }
         },
+        
+        draw: function() {
+            if (this.isDead) return;
+            this.update();
+            
+            push();
+            if (this.type === "crumbling" && this.isCrumbling) {
+                translate(random(-2, 2), 0); // Shake effect
+            }
+            
+            // Visuals based on type
+            if (this.type === "moving" || this.type === "moving_y") fill(100, 150, 200);
+            else if (this.type === "crumbling") fill(180, 100, 80);
+            else fill(120, 100, 80);
+            
+            rect(this.x, this.y, this.length, 20, 5);
+            fill(255, 50); rect(this.x, this.y, this.length, 5, 5);
+            pop();
+        },
+        
         checkContact: function(gc_x, gc_y) {
+            if (this.isDead) return false;
             if (gc_x > this.x && gc_x < this.x + this.length) {
                 var d = this.y - gc_y;
-                if (d >= 0 && d <= velocity_y + 2) return true;
+                if (d >= 0 && d <= velocity_y + 2) {
+                    if (this.type === "crumbling") this.isCrumbling = true;
+                    return true;
+                }
             }
             return false;
         }
     };
     return p;
+}
+
+// --- Bouncy Mushroom Factory ---
+function createMushroom(x, y) {
+    return {
+        x: x, y: y,
+        draw: function() {
+            push();
+            translate(this.x, this.y);
+            let bounce = sin(frameCount * 0.1) * 3;
+            let squish = map(bounce, -3, 3, 0.9, 1.1);
+            noStroke();
+            
+            // GROUND SHADOW (stays on ground)
+            fill(0, 50);
+            ellipse(0, 0, 40 * squish, 10);
+
+            // Stem
+            fill(240, 230, 210);
+            beginShape();
+            vertex(-8, 0);
+            bezierVertex(-10, -10, -5, -20, -5, -25);
+            vertex(5, -25);
+            bezierVertex(5, -20, 10, -10, 8, 0);
+            endShape(CLOSE);
+            
+            // INNER CAP SHADOW (moves with cap)
+            fill(0, 40);
+            ellipse(0, -22 + bounce, 55 * squish, 12 / squish);
+            
+            // Cap
+            fill(220, 60, 60);
+            arc(0, -25 + bounce, 70 * squish, 45 / squish, PI, TWO_PI, CHORD);
+            
+            // Cap Highlight (rim light)
+            fill(255, 120, 120, 180);
+            arc(0, -29 + bounce, 60 * squish, 35 / squish, PI + 0.4, TWO_PI - 0.4, CHORD);
+            
+            // Dots (with slight depth)
+            fill(255, 230);
+            ellipse(-15, -38 + bounce, 10, 8);
+            ellipse(15, -35 + bounce, 12, 10);
+            ellipse(0, -45 + bounce, 14, 12);
+            ellipse(-20, -30 + bounce, 6, 5);
+            ellipse(22, -28 + bounce, 7, 6);
+            pop();
+        },
+        checkContact: function(gc_x, gc_y) {
+            let d = dist(gc_x, gc_y, this.x, this.y - 25);
+            return d < 45;
+        }
+    };
 }
 
 // --- Extension 3: Enemy Constructor ---
@@ -286,12 +376,16 @@ function startGame() {
     generateStars();
     platforms = [];
     platforms.push(createPlatform(500, floorPos_y - 100, 150));
-    platforms.push(createPlatform(650, floorPos_y - 200, 150));
-    platforms.push(createPlatform(800, floorPos_y - 300, 150)); 
-    platforms.push(createPlatform(1500, floorPos_y - 150, 200)); 
+    platforms.push(createPlatform(750, floorPos_y - 200, 100, "moving", 50, 2));
+    platforms.push(createPlatform(1000, floorPos_y - 150, 120, "crumbling"));
+    platforms.push(createPlatform(1500, floorPos_y - 150, 200, "moving_y", 80, 1.5)); 
     platforms.push(createPlatform(2200, floorPos_y - 120, 200));
+    platforms.push(createPlatform(2500, floorPos_y - 220, 100, "crumbling"));
     platforms.push(createPlatform(2800, floorPos_y - 180, 150));
-    platforms.push(createPlatform(3200, floorPos_y - 100, 250));
+    platforms.push(createPlatform(3200, floorPos_y - 100, 250, "moving", 150, 3));
+    
+    generateMushrooms();
+    
     generateCollectables(); generateEnemies(); totalCollectables = collectables.length;
 }
 
@@ -316,6 +410,39 @@ function generateCheckpoints() {
             attempts++;
         }
         checkpoints.push({ x: safeX, isReached: false });
+    }
+}
+
+function generateMushrooms() {
+    mushrooms = [];
+    let mushroomSpawnX = [1300, 2000, 3800];
+    
+    for (let mx of mushroomSpawnX) {
+        let safeX = mx;
+        let isSafe = false;
+        let attempts = 0;
+        
+        while (!isSafe && attempts < 10) {
+            isSafe = true;
+            // Check canyons
+            for (let c of canyons) {
+                if (safeX > c.x_pos - 40 && safeX < c.x_pos + c.width + 40) {
+                    isSafe = false;
+                    safeX += 150;
+                    break;
+                }
+            }
+            // Check platforms (don't spawn under them)
+            for (let p of platforms) {
+                if (abs(safeX - p.x) < 50 && p.y < floorPos_y - 50) {
+                    isSafe = false;
+                    safeX += 200;
+                    break;
+                }
+            }
+            attempts++;
+        }
+        mushrooms.push(createMushroom(safeX, floorPos_y));
     }
 }
 
@@ -529,6 +656,7 @@ function drawGame() {
     }
     
     for (let p of platforms) p.draw();
+    for (let m of mushrooms) m.draw();
     if (invincibilityTimer > 0) invincibilityTimer--;
     
     for (let e of enemies) { 
@@ -749,7 +877,11 @@ function processCharacter() {
         if (gameChar_y < floorPos_y) { 
             let on = false; 
             for (let p of platforms) if (p.checkContact(gameChar_x, gameChar_y) && velocity_y >= 0) { 
-                on = true; isFalling = false; gameChar_y = p.y; velocity_y = 0; break; 
+                on = true; isFalling = false; gameChar_y = p.y; velocity_y = 0; 
+                // Move player with platform
+                if (p.type === "moving") gameChar_x += p.inc;
+                if (p.type === "moving_y") gameChar_y += p.inc;
+                break; 
             } 
             if (!on) { velocity_y += gravity; isFalling = true; } 
         } else { 
@@ -764,6 +896,17 @@ function processCharacter() {
                 gameChar_y = floorPos_y; 
                 velocity_y = 0; 
             } else velocity_y += gravity; 
+        }
+
+        // Mushroom interaction
+        for (let m of mushrooms) {
+            if (velocity_y > 0 && m.checkContact(gameChar_x, gameChar_y)) {
+                velocity_y = jumpPower * 1.5; // Super jump!
+                sounds.play('jump');
+                charScaleX = 0.6;
+                charScaleY = 1.4;
+                createDust(gameChar_x, gameChar_y);
+            }
         }
 
         // Apply Buffered Jump
