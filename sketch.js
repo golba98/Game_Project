@@ -2,6 +2,70 @@ var gameChar_x;
 var gameChar_y;
 var floorPos_y;
 
+// --- GAME STATES ---
+const STATE_START = "START";
+const STATE_PLAYING = "PLAYING";
+const STATE_PAUSED = "PAUSED";
+const STATE_GAMEOVER = "GAMEOVER";
+const STATE_WIN = "WIN";
+var gameState = STATE_START;
+
+// --- SOUND MANAGER ---
+class SoundManager {
+    constructor() {
+        this.audioCtx = null;
+    }
+
+    init() {
+        if (!this.audioCtx) {
+            let AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.audioCtx = new AudioContext();
+        }
+    }
+
+    play(type) {
+        this.init();
+        if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+        
+        let oscillator = this.audioCtx.createOscillator();
+        let gainNode = this.audioCtx.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(this.audioCtx.destination);
+
+        const now = this.audioCtx.currentTime;
+
+        if (type === 'coin') {
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(880, now);
+            oscillator.frequency.exponentialRampToValueAtTime(1320, now + 0.1);
+            gainNode.gain.setValueAtTime(0.1, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        } else if (type === 'jump') {
+            oscillator.type = 'triangle';
+            oscillator.frequency.setValueAtTime(150, now);
+            oscillator.frequency.exponentialRampToValueAtTime(400, now + 0.1);
+            gainNode.gain.setValueAtTime(0.1, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        } else if (type === 'death') {
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(100, now);
+            oscillator.frequency.linearRampToValueAtTime(20, now + 0.3);
+            gainNode.gain.setValueAtTime(0.2, now);
+            gainNode.gain.linearRampToValueAtTime(0, now + 0.5);
+        } else if (type === 'land') {
+            oscillator.type = 'triangle';
+            oscillator.frequency.setValueAtTime(100, now);
+            oscillator.frequency.exponentialRampToValueAtTime(40, now + 0.1);
+            gainNode.gain.setValueAtTime(0.05, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        }
+        
+        oscillator.start();
+        oscillator.stop(now + 0.5);
+    }
+}
+const sounds = new SoundManager();
+
 var trees = [];
 var mountains = [];
 var clouds = [];
@@ -14,6 +78,8 @@ var storyObjects = [];
 // Extensions
 var platforms = [];
 var enemies = [];
+var checkpoints = [];
+var lastCheckpoint = { x: 100, y: 450 };
 
 var isLeft = false;
 var isRight = false;
@@ -33,7 +99,7 @@ var furColor;
 var skinColor;
 
 var timeOfDay = 0;
-var cycleSpeed = 1;
+var cycleSpeed = 1.5;
 
 const seasonSpecs = [
     { 
@@ -84,6 +150,9 @@ var seasonTime = 0;
 const SEASON_DURATION = 720;
 
 var weatherParticles = [];
+var confetti = [];
+var stars = [];
+var shootingStar = null;
 
 var game_score;
 var flagpole;
@@ -97,6 +166,12 @@ var dustParticles = [];
 var tutorialAlpha = 255;
 var totalCollectables = 5;
 var level = 1;
+
+// QoL Variables
+var jumpBufferTimer = 0;
+const JUMP_BUFFER_LIMIT = 10;
+var screenShakeAmount = 0;
+var maxLevelDist = 4500; // Distance to flagpole
 
 // Polish Variables
 var coyoteTimer = 0;
@@ -156,35 +231,11 @@ function Enemy(x, y, range) {
     };
 }
 
-// --- Extension 1: Sound Helper ---
-function playSound(type) {
-    try {
-        let AudioContext = window.AudioContext || window.webkitAudioContext;
-        let audioCtx = new AudioContext();
-        let oscillator = audioCtx.createOscillator();
-        let gainNode = audioCtx.createGain();
-        oscillator.connect(gainNode); gainNode.connect(audioCtx.destination);
-        if (type === 'coin') {
-            oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); oscillator.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.1); gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        } else if (type === 'jump') {
-            oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(150, audioCtx.currentTime); oscillator.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.1); gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        } else if (type === 'death') {
-            oscillator.type = 'sawtooth'; oscillator.frequency.setValueAtTime(100, audioCtx.currentTime); oscillator.frequency.linearRampToValueAtTime(20, audioCtx.currentTime + 0.3); gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
-        } else if (type === 'land') {
-            let s = seasons[currentSeasonIndex] || seasons[0];
-            if (s.name === "Winter") { oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(60, audioCtx.currentTime); }
-            else { oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(100, audioCtx.currentTime); }
-            gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
-        }
-        oscillator.start(); oscillator.stop(audioCtx.currentTime + 0.5);
-    } catch (e) {}
-}
-
 function playSeasonalAmbience() {
-    if (frameCount % 180 !== 0) return;
+    if (frameCount % 180 !== 0 || !sounds.audioCtx) return;
     try {
-        let AudioContext = window.AudioContext || window.webkitAudioContext;
-        let audioCtx = new AudioContext();
+        let audioCtx = sounds.audioCtx;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
         let oscillator = audioCtx.createOscillator();
         let gainNode = audioCtx.createGain();
         oscillator.connect(gainNode); gainNode.connect(audioCtx.destination);
@@ -201,10 +252,10 @@ function playSeasonalAmbience() {
 var noteSequence = [220, 247, 261, 293, 329]; 
 var currentNote = 0;
 function playProceduralMusic() {
-    if (frameCount % 30 !== 0) return;
+    if (frameCount % 30 !== 0 || !sounds.audioCtx) return;
     try {
-        let AudioContext = window.AudioContext || window.webkitAudioContext;
-        let audioCtx = new AudioContext();
+        let audioCtx = sounds.audioCtx;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
         let oscillator = audioCtx.createOscillator();
         let gainNode = audioCtx.createGain();
         oscillator.connect(gainNode); gainNode.connect(audioCtx.destination);
@@ -229,7 +280,10 @@ function setup() {
 function startGame() {
     gameChar_x = 100; gameChar_y = floorPos_y; velocity_y = 0; cameraPosX = 0; tutorialAlpha = 255; game_score = 0; flagpole = { isReached: false, x_pos: 4500, height: 0 };
     isLeft = false; isRight = false; isFalling = false; isPlummeting = false; isHibernating = false; invincibilityTimer = 0; coyoteTimer = 0;
+    lastCheckpoint = { x: 100, y: floorPos_y };
     generateCanyons(); generateCave(); initializeSeasons(); generateTrees(); generateMountains(); generateClouds(); generateStoryObjects();
+    generateCheckpoints();
+    generateStars();
     platforms = [];
     platforms.push(createPlatform(500, floorPos_y - 100, 150));
     platforms.push(createPlatform(650, floorPos_y - 200, 150));
@@ -239,6 +293,44 @@ function startGame() {
     platforms.push(createPlatform(2800, floorPos_y - 180, 150));
     platforms.push(createPlatform(3200, floorPos_y - 100, 250));
     generateCollectables(); generateEnemies(); totalCollectables = collectables.length;
+}
+
+function generateCheckpoints() {
+    checkpoints = [];
+    let targets = [1000, 2000, 3000, 4000];
+    
+    for (let tx of targets) {
+        let safeX = tx;
+        let isSafe = false;
+        let attempts = 0;
+        
+        while (!isSafe && attempts < 10) {
+            isSafe = true;
+            for (let c of canyons) {
+                if (safeX > c.x_pos - 20 && safeX < c.x_pos + c.width + 20) {
+                    isSafe = false;
+                    safeX += 100; // Move it along until it's safe
+                    break;
+                }
+            }
+            attempts++;
+        }
+        checkpoints.push({ x: safeX, isReached: false });
+    }
+}
+
+function checkCheckpoints() {
+    for (let cp of checkpoints) {
+        if (!cp.isReached && dist(gameChar_x, floorPos_y, cp.x, floorPos_y) < 50) {
+            cp.isReached = true;
+            lastCheckpoint = { x: cp.x, y: floorPos_y };
+            // Optional: play a "checkpoint reached" sound
+        }
+    }
+}
+
+function drawCheckpoints() {
+    // Visual flags removed per user request
 }
 
 function generateStoryObjects() {
@@ -264,10 +356,10 @@ function generateEnemies() {
 
 function generateCanyons() {
     canyons = []; 
-    // THE LEAP OF FAITH: wide but clearable
-    canyons.push({ x_pos: 1800, width: 280 }); 
+    // THE LEAP OF FAITH: wide but clearable (Max jump is ~250px)
+    canyons.push({ x_pos: 1800, width: 220 }); 
     for (var i = 0; i < 4; i++) {
-        var cx = random(500, 4000), cw = random(80, 150), valid = true;
+        var cx = random(500, 4000), cw = random(80, 180), valid = true;
         for (let c of canyons) if (abs(c.x_pos - cx) < 400) { valid = false; break; }
         if (valid) canyons.push({ x_pos: cx, width: cw }); else i--;
     }
@@ -360,31 +452,281 @@ function drawStoryObjects() {
 }
 
 function draw() {
-    let scaleX = width / ORIGINAL_WIDTH, scaleY = height / ORIGINAL_HEIGHT; updateDayNightCycle(); updateSeasonCycle(); updateHibernationLogic(); drawSkyAndCelestialBodies(); playSeasonalAmbience(); playProceduralMusic();
-    push(); scale(scaleX, scaleY); cameraPosX = lerp(cameraPosX, gameChar_x - ORIGINAL_WIDTH / 2, 0.1);
-    push(); translate(-cameraPosX * 0.2, 0); drawMountains(); pop(); push(); translate(-cameraPosX * 0.5, 0); drawClouds(); pop();
-    translate(-cameraPosX, 0); drawGroundAndGrass(); drawStoryObjects(); if (cave) drawCave(); drawTrees();
-    for (var c of canyons) { drawCanyon(c); if (gameChar_x > c.x_pos && gameChar_x < c.x_pos + c.width && gameChar_y >= floorPos_y) isPlummeting = true; }
-    for (var col of collectables) { drawCollectable(col); if (!col.isFound && dist(gameChar_x, gameChar_y, col.x_pos, col.y_pos) < 50) { col.isFound = true; game_score++; playSound('coin'); } }
+    if (gameState === STATE_START) {
+        drawStartMenu();
+    } else if (gameState === STATE_PLAYING) {
+        updateGame();
+        drawGame();
+    } else if (gameState === STATE_PAUSED) {
+        drawGame();
+        drawPauseScreen();
+    } else if (gameState === STATE_GAMEOVER) {
+        drawGameOver();
+    } else if (gameState === STATE_WIN) {
+        drawWinScreen();
+    }
+}
+
+function updateGame() {
+    updateDayNightCycle(); 
+    updateSeasonCycle(); 
+    updateHibernationLogic(); 
+    playSeasonalAmbience(); 
+    playProceduralMusic();
+    
+    charScaleX = lerp(charScaleX, 1, 0.2); 
+    charScaleY = lerp(charScaleY, 1, 0.2); 
+    heartPulse += 0.1;
+    
+    updateWeather();
+    checkCheckpoints();
+    
+    if (lives < 1) gameState = STATE_GAMEOVER;
+    
+    // Transition to win state only after flag animation finishes
+    if (flagpole.isReached && flagpole.height >= 200) {
+        gameState = STATE_WIN;
+    }
+}
+
+function drawGame() {
+    let scaleX = width / ORIGINAL_WIDTH, scaleY = height / ORIGINAL_HEIGHT;
+    drawSkyAndCelestialBodies();
+    
+    push(); 
+    // Apply screen shake
+    if (screenShakeAmount > 0) {
+        translate(random(-screenShakeAmount, screenShakeAmount), random(-screenShakeAmount, screenShakeAmount));
+        screenShakeAmount *= 0.9;
+        if (screenShakeAmount < 0.1) screenShakeAmount = 0;
+    }
+
+    scale(scaleX, scaleY); 
+    cameraPosX = lerp(cameraPosX, gameChar_x - ORIGINAL_WIDTH / 2, 0.1);
+    
+    push(); translate(-cameraPosX * 0.2, 0); drawMountains(); pop(); 
+    push(); translate(-cameraPosX * 0.5, 0); drawClouds(); pop();
+    
+    translate(-cameraPosX, 0); 
+    drawGroundAndGrass(); 
+    drawStoryObjects(); 
+    if (cave) drawCave(); 
+    drawTrees();
+    drawCheckpoints();
+    
+    for (var c of canyons) { 
+        drawCanyon(c); 
+        if (gameChar_x > c.x_pos && gameChar_x < c.x_pos + c.width && gameChar_y >= floorPos_y) isPlummeting = true; 
+    }
+    
+    for (var col of collectables) { 
+        drawCollectable(col); 
+        if (!col.isFound && dist(gameChar_x, gameChar_y, col.x_pos, col.y_pos) < 50) { 
+            col.isFound = true; 
+            game_score++; 
+            sounds.play('coin'); 
+        } 
+    }
+    
     for (let p of platforms) p.draw();
     if (invincibilityTimer > 0) invincibilityTimer--;
-    for (let e of enemies) { e.draw(); if (!isHibernating && invincibilityTimer === 0 && e.checkContact(gameChar_x, gameChar_y)) { lives--; playSound('death'); invincibilityTimer = 90; if (lives > 0) respawnCharacter(); } }
-    updateAndDrawDust(); processCharacter(); drawCharacterStatusUI(); renderFlagpole(); pop(); 
-    charScaleX = lerp(charScaleX, 1, 0.2); charScaleY = lerp(charScaleY, 1, 0.2); heartPulse += 0.1;
-    updateWeather(); drawFog(); drawHUD();
-    if (game_score === totalCollectables && !flagpole.isReached) { fill(255, 215, 0); textAlign(CENTER, CENTER); textSize(24); text("ALL PINE CONES COLLECTED! FIX THE HOME!", width / 2, 120); }
-    if (lives < 1) { fill(0, 200); rect(0, 0, width, height); textAlign(CENTER, CENTER); fill(255); textSize(40); text("The Great Freeze wins. Press Space.", width/2, height/2); return; }
-    if (flagpole.isReached && flagpole.height >= 200) { fill(0, 200); rect(0, 0, width, height); textAlign(CENTER, CENTER); fill(255); if (game_score < totalCollectables) text("More pine cones needed! Press Space.", width/2, height/2); else text("Home repaired for now! Press 'N' for Level " + (level+1), width/2, height/2); return; }
-    checkPlayerDie(); if (!flagpole.isReached && abs(gameChar_x - flagpole.x_pos) < 20) flagpole.isReached = true; coinAngle += 0.05;
+    
+    for (let e of enemies) { 
+        e.draw(); 
+        if (!isHibernating && invincibilityTimer === 0 && e.checkContact(gameChar_x, gameChar_y)) { 
+            lives--; 
+            screenShakeAmount = 15;
+            sounds.play('death'); 
+            invincibilityTimer = 90; 
+            if (lives > 0) respawnCharacter(); 
+        } 
+    }
+    
+    updateAndDrawDust(); 
+    processCharacter(); 
+    drawCharacterStatusUI(); 
+    
+    // Flagpole collision detection
+    if (!flagpole.isReached && abs(gameChar_x - flagpole.x_pos) < 20) {
+        flagpole.isReached = true;
+    }
+    
+    renderFlagpole(); 
+    pop(); 
+    
+    updateAndDrawConfetti();
+    drawFog(); 
+    drawHUD();
+    checkPlayerDie();
+    coinAngle += 0.05;
+}
+
+function drawStartMenu() {
+    background(0);
+    textAlign(CENTER, CENTER);
+    fill(255);
+    textSize(40);
+    text("THE GREAT FREEZE", width / 2, height / 2 - 50);
+    textSize(20);
+    text("Press ENTER to Start", width / 2, height / 2 + 50);
+}
+
+function drawPauseScreen() {
+    fill(0, 150);
+    rect(0, 0, width, height);
+    textAlign(CENTER, CENTER);
+    fill(255);
+    textSize(40);
+    text("PAUSED", width / 2, height / 2);
+    textSize(20);
+    text("Press P to Resume", width / 2, height / 2 + 50);
+}
+
+function drawGameOver() {
+    fill(0, 200);
+    rect(0, 0, width, height);
+    textAlign(CENTER, CENTER);
+    fill(255);
+    textSize(40);
+    text("The Great Freeze wins.", width / 2, height / 2);
+    textSize(20);
+    text("Press SPACE to try again", width / 2, height / 2 + 50);
+}
+
+function drawWinScreen() {
+    fill(0, 200);
+    rect(0, 0, width, height);
+    textAlign(CENTER, CENTER);
+    fill(255);
+    textSize(40);
+    if (game_score < totalCollectables) {
+        text("More pine cones needed!", width / 2, height / 2);
+        textSize(20);
+        text("Press SPACE to restart", width / 2, height / 2 + 50);
+    } else {
+        text("Home repaired for now!", width / 2, height / 2);
+        textSize(20);
+        text("Press N for Level " + (level + 1), width / 2, height / 2 + 50);
+    }
 }
 
 function updateDayNightCycle() { timeOfDay = (timeOfDay + cycleSpeed) % 1440; }
 function updateSeasonCycle() { seasonTime += cycleSpeed; if (seasonTime >= SEASON_DURATION) { seasonTime = 0; currentSeasonIndex = (currentSeasonIndex + 1) % seasons.length; if (seasons[currentSeasonIndex].name === "Summer") isHibernating = false; } }
 function updateHibernationLogic() { if (isHibernating && ++hibernationTimer >= HIBERNATION_DURATION) isHibernating = false; }
 
+function generateStars() {
+    stars = [];
+    for (let i = 0; i < 100; i++) {
+        stars.push({
+            x: random(width),
+            y: random(height * 0.6),
+            size: random(1, 3),
+            twinkleSpeed: random(0.05, 0.1),
+            phase: random(TWO_PI)
+        });
+    }
+}
+
 function drawSkyAndCelestialBodies() {
-    let c1 = color(135, 206, 250), c2 = color(200, 230, 255); const s = seasons[currentSeasonIndex] || seasons[0];
-    for (let y = 0; y < height; y++) { let c = lerpColor(c1, c2, y/height); stroke(lerpColor(c, s.sky, 0.25)); line(0, y, width, y); }
+    let s = seasons[currentSeasonIndex] || seasons[0];
+    let dayRatio = 1 - abs(timeOfDay - 720) / 720;
+    let nightColor = color(10, 10, 30);
+    let dayColor = s.sky;
+    let skyColor = lerpColor(nightColor, dayColor, dayRatio);
+
+    background(skyColor);
+
+    // Stars at night
+    if (dayRatio < 0.6) {
+        let starAlpha = map(dayRatio, 0, 0.6, 255, 0);
+        noStroke();
+        for (let star of stars) {
+            let twinkle = Math.sin(frameCount * star.twinkleSpeed + star.phase);
+            let alpha = map(twinkle, -1, 1, starAlpha * 0.3, starAlpha);
+            fill(255, alpha);
+            // Add subtle parallax: stars move slightly with camera
+            let px = (star.x - cameraPosX * 0.05) % width;
+            if (px < 0) px += width;
+            ellipse(px, star.y, star.size, star.size);
+        }
+
+        // Shooting Star logic
+        if (!shootingStar && random() < 0.005 && dayRatio < 0.3) {
+            shootingStar = {
+                x: random(width),
+                y: random(height * 0.4),
+                vx: random(10, 20),
+                vy: random(2, 5),
+                life: 1.0
+            };
+        }
+
+        if (shootingStar) {
+            stroke(255, shootingStar.life * 255);
+            strokeWeight(2);
+            line(shootingStar.x, shootingStar.y, shootingStar.x - shootingStar.vx * 2, shootingStar.y - shootingStar.vy * 2);
+            shootingStar.x += shootingStar.vx;
+            shootingStar.y += shootingStar.vy;
+            shootingStar.life -= 0.02;
+            if (shootingStar.life <= 0) shootingStar = null;
+        }
+    }
+
+    // Celestial movement
+    let angle = map(timeOfDay, 0, 1440, PI, 3 * PI);
+    let cx = width / 2 + cos(angle) * (width * 0.4);
+    let cy = height * 0.6 + sin(angle) * (height * 0.4);
+
+    if (dayRatio > 0.25) { // Sun
+        noStroke();
+        fill(255, 255, 150);
+        ellipse(cx, cy, 60, 60);
+        fill(255, 255, 100, 50);
+        ellipse(cx, cy, 80, 80);
+    } else { // Moon
+        let mx = width / 2 + cos(angle + PI) * (width * 0.4);
+        let my = height * 0.6 + sin(angle + PI) * (height * 0.4);
+        noStroke();
+        fill(220, 220, 255);
+        ellipse(mx, my, 50, 50);
+        fill(skyColor);
+        ellipse(mx + 10, my - 5, 45, 45);
+    }
+}
+
+function createConfetti(x, y) {
+    for (let i = 0; i < 50; i++) {
+        confetti.push({
+            x: x,
+            y: y,
+            vx: random(-5, 5),
+            vy: random(-10, -2),
+            color: color(random(255), random(255), random(255)),
+            size: random(5, 10),
+            angle: random(TWO_PI),
+            spin: random(-0.2, 0.2)
+        });
+    }
+}
+
+function updateAndDrawConfetti() {
+    for (let i = confetti.length - 1; i >= 0; i--) {
+        let p = confetti[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.2; // Gravity
+        p.angle += p.spin;
+        
+        push();
+        translate(p.x, p.y);
+        rotate(p.angle);
+        fill(p.color);
+        noStroke();
+        rect(-p.size/2, -p.size/2, p.size, p.size/2);
+        pop();
+        
+        if (p.y > height) confetti.splice(i, 1);
+    }
 }
 
 function drawGroundAndGrass() { const s = seasons[currentSeasonIndex] || seasons[0]; noStroke(); fill(lerpColor(color(139, 69, 19), s.ground, 0.45)); rect(-3000, floorPos_y, 8000, ORIGINAL_HEIGHT / 2); fill(lerpColor(color(34, 139, 34), s.grass, 0.55)); rect(-3000, floorPos_y, 8000, 20); }
@@ -396,8 +738,46 @@ function drawCave() {
 
 function processCharacter() {
     if (!isHibernating && !isPlummeting) { isLeft = keyIsDown(LEFT_ARROW) || keyIsDown(65); isRight = keyIsDown(RIGHT_ARROW) || keyIsDown(68); if (isLeft) gameChar_x -= 5; if (isRight) gameChar_x += 5; }
-    if (!isHibernating) { gameChar_y += velocity_y; if (!isFalling) coyoteTimer = COYOTE_TIME_LIMIT; else if (coyoteTimer > 0) coyoteTimer--; if (gameChar_y < floorPos_y) { let on = false; for (let p of platforms) if (p.checkContact(gameChar_x, gameChar_y) && velocity_y >= 0) { on = true; isFalling = false; gameChar_y = p.y; velocity_y = 0; break; } if (!on) { velocity_y += gravity; isFalling = true; } } else { if (isFalling) { createDust(gameChar_x, floorPos_y); charScaleX = 1.2; charScaleY = 0.8; playSound('land'); } isFalling = false; if (!isPlummeting) { gameChar_y = floorPos_y; velocity_y = 0; } else velocity_y += gravity; }
-    if (gameChar_x < -3000 || gameChar_x > 5000) isPlummeting = true; drawGameCharBody(); }
+    if (!isHibernating) { 
+        gameChar_y += velocity_y; 
+        
+        if (jumpBufferTimer > 0) jumpBufferTimer--;
+
+        if (!isFalling) coyoteTimer = COYOTE_TIME_LIMIT; 
+        else if (coyoteTimer > 0) coyoteTimer--; 
+        
+        if (gameChar_y < floorPos_y) { 
+            let on = false; 
+            for (let p of platforms) if (p.checkContact(gameChar_x, gameChar_y) && velocity_y >= 0) { 
+                on = true; isFalling = false; gameChar_y = p.y; velocity_y = 0; break; 
+            } 
+            if (!on) { velocity_y += gravity; isFalling = true; } 
+        } else { 
+            if (isFalling) { 
+                createDust(gameChar_x, floorPos_y); 
+                charScaleX = 1.2; 
+                charScaleY = 0.8; 
+                sounds.play('land'); 
+            } 
+            isFalling = false; 
+            if (!isPlummeting) { 
+                gameChar_y = floorPos_y; 
+                velocity_y = 0; 
+            } else velocity_y += gravity; 
+        }
+
+        // Apply Buffered Jump
+        if (jumpBufferTimer > 0 && (coyoteTimer > 0 || !isFalling) && !isPlummeting) {
+            velocity_y = jumpPower;
+            sounds.play('jump');
+            charScaleX = 0.8;
+            charScaleY = 1.2;
+            coyoteTimer = 0;
+            jumpBufferTimer = 0;
+        }
+    }
+    if (gameChar_x < -3000 || gameChar_x > 5000) isPlummeting = true; 
+    drawGameCharBody(); 
 }
 
 function drawGameCharBody() {
@@ -417,15 +797,79 @@ function drawCharacterStatusUI() {
     if (s.name === "Winter" && !isHibernating && isNearCave) { let x = gameChar_x, y = gameChar_y - 120, message = "i need to sleep (W)"; push(); textSize(16); let padding = 12, bW = textWidth(message) + padding * 2, bH = 40; fill(255); stroke(0); strokeWeight(2); rect(x - bW/2, y - bH, bW, bH, 15); noStroke(); fill(255); triangle(x - 10, y - bH + 38, x + 10, y - bH + 38, x, y - bH + 50); stroke(0); line(x - 10, y - bH + 38, x, y - bH + 50); line(x + 10, y - bH + 38, x, y - bH + 50); noStroke(); fill(0); textAlign(CENTER, CENTER); text(message, x, y - bH/2); pop(); }
 }
 
-function respawnCharacter() { gameChar_x = 100; gameChar_y = floorPos_y; velocity_y = 0; isPlummeting = false; isFalling = false; isLeft = false; isRight = false; cameraPosX = 0; }
+function respawnCharacter() { 
+    gameChar_x = lastCheckpoint.x; 
+    gameChar_y = lastCheckpoint.y; 
+    velocity_y = 0; 
+    isPlummeting = false; 
+    isFalling = false; 
+    isLeft = false; 
+    isRight = false; 
+    invincibilityTimer = 60; // 1 second of invincibility on respawn
+    cameraPosX = gameChar_x - ORIGINAL_WIDTH / 2; 
+}
 
 function keyPressed() {
-    if (lives < 1 && keyCode == 32) { level = 1; lives = 3; setup(); return false; }
-    if (flagpole.isReached && flagpole.height >= 200 && (key === 'N' || key === 'n')) { if (game_score === totalCollectables) { level++; startGame(); return false; } }
-    if (flagpole.isReached && flagpole.height >= 200 && keyCode == 32) { startGame(); return false; }
-    if (gameChar_y > height && keyCode == 32) { lives--; playSound('death'); if (lives > 0) respawnCharacter(); return false; }
-    if (key === 'W' || key === 'w') toggleHibernation();
-    if (keyCode == 32 && (coyoteTimer > 0) && !isPlummeting && !isHibernating) { velocity_y = jumpPower; playSound('jump'); charScaleX = 0.8; charScaleY = 1.2; coyoteTimer = 0; }
+    if (gameState === STATE_START) {
+        if (keyCode === ENTER || keyCode === 32) {
+            gameState = STATE_PLAYING;
+            sounds.init();
+        }
+        return false;
+    }
+
+    if (gameState === STATE_PAUSED) {
+        if (key === 'P' || key === 'p' || keyCode === 27) gameState = STATE_PLAYING;
+        return false;
+    }
+
+    if (gameState === STATE_GAMEOVER) {
+        if (keyCode === 32) {
+            level = 1; lives = 3; gameState = STATE_PLAYING; startGame();
+        }
+        return false;
+    }
+
+    if (gameState === STATE_WIN) {
+        if (key === 'N' || key === 'n') {
+            if (game_score === totalCollectables) {
+                level++; gameState = STATE_PLAYING; startGame();
+            }
+        } else if (keyCode === 32) {
+            gameState = STATE_PLAYING; startGame();
+        }
+        return false;
+    }
+
+    if (gameState === STATE_PLAYING) {
+        if (key === 'P' || key === 'p' || keyCode === 27) {
+            gameState = STATE_PAUSED;
+            return false;
+        }
+
+        if (lives < 1 && keyCode == 32) { 
+            level = 1; lives = 3; setup(); return false; 
+        }
+        
+        // Jump Buffering: Store the jump intent even if not on ground yet
+        if (keyCode == 32 && !isHibernating) {
+            jumpBufferTimer = JUMP_BUFFER_LIMIT;
+        }
+
+        if (flagpole.isReached && flagpole.height >= 200 && (key === 'N' || key === 'n')) { 
+            if (game_score === totalCollectables) { level++; startGame(); return false; } 
+        }
+        if (flagpole.isReached && flagpole.height >= 200 && keyCode == 32) { 
+            startGame(); return false; 
+        }
+        if (gameChar_y > height && keyCode == 32) { 
+            lives--; sounds.play('death'); if (lives > 0) respawnCharacter(); return false; 
+        }
+        if (key === 'W' || key === 'w') toggleHibernation();
+        if (keyCode == 32 && (coyoteTimer > 0) && !isPlummeting && !isHibernating) { 
+            velocity_y = jumpPower; sounds.play('jump'); charScaleX = 0.8; charScaleY = 1.2; coyoteTimer = 0; 
+        }
+    }
     return false;
 }
 
@@ -438,9 +882,31 @@ function toggleHibernation() {
     else if (seasons[currentSeasonIndex].name === "Winter" && near) { isHibernating = true; gameChar_x = cave.x_pos + cave.width / 2; gameChar_y = floorPos_y; hibernationTimer = 0; }
 }
 
-function renderFlagpole() { push(); stroke(100); strokeWeight(4); line(flagpole.x_pos, floorPos_y, flagpole.x_pos, floorPos_y - 250); if (flagpole.isReached && flagpole.height < 200) flagpole.height += 4; fill(255, 50, 50); rect(flagpole.x_pos, floorPos_y - 50 - flagpole.height, 60, 40); pop(); }
+function renderFlagpole() { 
+    push(); 
+    stroke(100); 
+    strokeWeight(4); 
+    line(flagpole.x_pos, floorPos_y, flagpole.x_pos, floorPos_y - 250); 
+    
+    if (flagpole.isReached && flagpole.height < 200) {
+        flagpole.height += 4;
+        if (flagpole.height >= 200) {
+            createConfetti(flagpole.x_pos - cameraPosX, height/2);
+            sounds.play('coin'); // Use coin sound as a temporary victory chime
+        }
+    }
+    
+    fill(255, 50, 50); 
+    rect(flagpole.x_pos, floorPos_y - 50 - flagpole.height, 60, 40); 
+    pop(); 
+}
 
-function checkPlayerDie() { if (gameChar_y > height && lives > 0) { fill(0, 200); rect(0, 0, width, height); textAlign(CENTER, CENTER); textSize(30); fill(255); text("The Freeze takes you. Press Space.", width/2, height/2); } }
+function checkPlayerDie() { 
+    if (gameChar_y > height && lives > 0) { 
+        screenShakeAmount = 10;
+        fill(0, 200); rect(0, 0, width, height); textAlign(CENTER, CENTER); textSize(30); fill(255); text("The Freeze takes you. Press Space.", width/2, height/2); 
+    } 
+}
 
 function updateWeather() {
     let cur = seasonSpecs[currentSeasonIndex], w = cur.weather; if (w.type === 'none') { weatherParticles = []; return; }
@@ -451,9 +917,26 @@ function updateWeather() {
 function drawFog() { let fog = seasonSpecs[currentSeasonIndex].fog; if (fog.alpha > 0) { noStroke(); fill(fog.color[0], fog.color[1], fog.color[2], fog.alpha); rect(0, 0, width, height); } }
 
 function drawHUD() {
-    drawQuestCompass(); for (let i = 0; i < lives; i++) { let s = (i === lives - 1 && lives === 1) ? 1 + sin(heartPulse)*0.2 : 1; fill(255, 50, 50); push(); translate(30 + i * 40, 40); scale(s); ellipse(0, 0, 25, 25); pop(); }
-    fill(255, 215, 0); stroke(0); strokeWeight(2); textSize(24); textAlign(LEFT, TOP); text("Pine Cones: " + game_score + " / " + totalCollectables, 20, 70); fill(255); textSize(20); text("Level: " + level, 20, 105);
-    if (tutorialAlpha > 0) { fill(255, tutorialAlpha); textAlign(CENTER, CENTER); textSize(30); text("Repair your home before the Great Freeze!", width/2, height/2 - 150); text("ARROWS to Move, SPACE to Jump", width/2, height/2 - 100); if (isLeft || isRight || isFalling) tutorialAlpha -= 2; }
+    drawQuestCompass(); 
+    
+    // Progress Bar
+    let barW = 200, barH = 10, barX = width/2 - barW/2, barY = 30;
+    noStroke(); fill(0, 100); rect(barX, barY, barW, barH, 5);
+    let progress = map(gameChar_x, 100, flagpole.x_pos, 0, barW, true);
+    fill(255, 215, 0); rect(barX, barY, progress, barH, 5);
+    fill(255); textSize(10); textAlign(CENTER, BOTTOM); text("PROGRESS TO HOME", width/2, barY - 5);
+
+    for (let i = 0; i < lives; i++) { 
+        let s = (i === lives - 1 && lives === 1) ? 1 + sin(heartPulse)*0.2 : 1; 
+        fill(255, 50, 50); push(); translate(30 + i * 40, 40); scale(s); ellipse(0, 0, 25, 25); pop(); 
+    }
+    
+    fill(255, 215, 0); stroke(0); strokeWeight(2); textSize(24); textAlign(LEFT, TOP); text("Pine Cones: " + game_score + " / " + totalCollectables, 20, 70); 
+    fill(255); textSize(16); noStroke(); text("P: Pause | W: Hibernate", 20, height - 30);
+    
+    if (tutorialAlpha > 0) { 
+        fill(255, tutorialAlpha); textAlign(CENTER, CENTER); textSize(30); text("Repair your home before the Great Freeze!", width/2, height/2 - 150); text("ARROWS to Move, SPACE to Jump", width/2, height/2 - 100); if (isLeft || isRight || isFalling) tutorialAlpha -= 2; 
+    }
 }
 
 function drawQuestCompass() {
