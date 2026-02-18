@@ -6,20 +6,52 @@ var floorPos_y;
 const STATE_START = "START";
 const STATE_PLAYING = "PLAYING";
 const STATE_PAUSED = "PAUSED";
+const STATE_SETTINGS = "SETTINGS";
 const STATE_GAMEOVER = "GAMEOVER";
 const STATE_WIN = "WIN";
 var gameState = STATE_START;
+var previousState = STATE_START;
 
 // --- SOUND MANAGER ---
 class SoundManager {
     constructor() {
         this.audioCtx = null;
+        this.masterGain = null;
+        this.volume = 0.5; // Default volume
+        this.loadVolume();
     }
 
     init() {
         if (!this.audioCtx) {
             let AudioContext = window.AudioContext || window.webkitAudioContext;
             this.audioCtx = new AudioContext();
+            this.masterGain = this.audioCtx.createGain();
+            this.masterGain.connect(this.audioCtx.destination);
+            this.updateMasterGain();
+        }
+    }
+
+    loadVolume() {
+        let savedVolume = localStorage.getItem('gameVolume');
+        if (savedVolume !== null) {
+            this.volume = parseFloat(savedVolume);
+        }
+    }
+
+    saveVolume() {
+        localStorage.setItem('gameVolume', this.volume);
+    }
+
+    setVolume(v) {
+        this.volume = constrain(v, 0, 1);
+        this.init();
+        this.updateMasterGain();
+        this.saveVolume();
+    }
+
+    updateMasterGain() {
+        if (this.masterGain) {
+            this.masterGain.gain.setTargetAtTime(this.volume, this.audioCtx.currentTime, 0.05);
         }
     }
 
@@ -30,7 +62,7 @@ class SoundManager {
         let oscillator = this.audioCtx.createOscillator();
         let gainNode = this.audioCtx.createGain();
         oscillator.connect(gainNode);
-        gainNode.connect(this.audioCtx.destination);
+        gainNode.connect(this.masterGain);
 
         const now = this.audioCtx.currentTime;
 
@@ -341,11 +373,12 @@ function Enemy(x, y, range) {
 function playSeasonalAmbience() {
     if (frameCount % 180 !== 0 || !sounds.audioCtx) return;
     try {
+        sounds.init();
         let audioCtx = sounds.audioCtx;
         if (audioCtx.state === 'suspended') audioCtx.resume();
         let oscillator = audioCtx.createOscillator();
         let gainNode = audioCtx.createGain();
-        oscillator.connect(gainNode); gainNode.connect(audioCtx.destination);
+        oscillator.connect(gainNode); gainNode.connect(sounds.masterGain);
         let s = seasons[currentSeasonIndex] || seasons[0];
         if (s.name === "Spring") { oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(random(1500, 2500), audioCtx.currentTime); gainNode.gain.setValueAtTime(0, audioCtx.currentTime); gainNode.gain.linearRampToValueAtTime(0.02, audioCtx.currentTime + 0.1); gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2); }
         else if (s.name === "Summer") { oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(1000, audioCtx.currentTime); gainNode.gain.setValueAtTime(0, audioCtx.currentTime); gainNode.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.2); gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5); }
@@ -361,11 +394,12 @@ var currentNote = 0;
 function playProceduralMusic() {
     if (frameCount % 30 !== 0 || !sounds.audioCtx) return;
     try {
+        sounds.init();
         let audioCtx = sounds.audioCtx;
         if (audioCtx.state === 'suspended') audioCtx.resume();
         let oscillator = audioCtx.createOscillator();
         let gainNode = audioCtx.createGain();
-        oscillator.connect(gainNode); gainNode.connect(audioCtx.destination);
+        oscillator.connect(gainNode); gainNode.connect(sounds.masterGain);
         let s = seasons[currentSeasonIndex] || seasons[0];
         let baseFreq = noteSequence[currentNote];
         currentNote = (currentNote + 1) % noteSequence.length;
@@ -639,6 +673,10 @@ function draw() {
     } else if (gameState === STATE_PAUSED) {
         drawGame();
         drawPauseScreen();
+    } else if (gameState === STATE_SETTINGS) {
+        if (previousState === STATE_PLAYING || previousState === STATE_PAUSED) drawGame();
+        else background(0);
+        drawSettingsMenu();
     } else if (gameState === STATE_GAMEOVER) {
         drawGameOver();
     } else if (gameState === STATE_WIN) {
@@ -749,6 +787,9 @@ function drawStartMenu() {
     text("THE GREAT FREEZE", width / 2, height / 2 - 50);
     textSize(20);
     text("Press ENTER to Start", width / 2, height / 2 + 50);
+    textSize(16);
+    fill(200);
+    text("Press S for Settings", width / 2, height / 2 + 100);
 }
 
 function drawPauseScreen() {
@@ -760,6 +801,47 @@ function drawPauseScreen() {
     text("PAUSED", width / 2, height / 2);
     textSize(20);
     text("Press P to Resume", width / 2, height / 2 + 50);
+    textSize(16);
+    fill(200);
+    text("Press S for Settings", width / 2, height / 2 + 100);
+}
+
+function drawSettingsMenu() {
+    fill(0, 200);
+    rect(0, 0, width, height);
+    textAlign(CENTER, CENTER);
+    fill(255);
+    textSize(40);
+    text("SETTINGS", width / 2, height / 2 - 100);
+    
+    // Volume Slider
+    let sliderX = width / 2 - 100;
+    let sliderY = height / 2;
+    let sliderW = 200;
+    
+    fill(100);
+    rect(sliderX, sliderY, sliderW, 10, 5);
+    
+    let handleX = sliderX + sounds.volume * sliderW;
+    fill(255, 215, 0);
+    ellipse(handleX, sliderY + 5, 20, 20);
+    
+    fill(255);
+    textSize(20);
+    text("Volume: " + floor(sounds.volume * 100) + "%", width / 2, sliderY - 30);
+    
+    // Interaction hint
+    if (mouseIsPressed) {
+        if (mouseX >= sliderX && mouseX <= sliderX + sliderW && 
+            mouseY >= sliderY - 20 && mouseY <= sliderY + 30) {
+            let newVal = (mouseX - sliderX) / sliderW;
+            sounds.setVolume(newVal);
+        }
+    }
+
+    textSize(16);
+    fill(200);
+    text("Press ESC or S to Go Back", width / 2, height / 2 + 100);
 }
 
 function drawGameOver() {
@@ -1013,12 +1095,26 @@ function keyPressed() {
         if (keyCode === ENTER || keyCode === 32) {
             gameState = STATE_PLAYING;
             sounds.init();
+        } else if (key === 'S' || key === 's') {
+            previousState = gameState;
+            gameState = STATE_SETTINGS;
         }
         return false;
     }
 
     if (gameState === STATE_PAUSED) {
         if (key === 'P' || key === 'p' || keyCode === 27) gameState = STATE_PLAYING;
+        else if (key === 'S' || key === 's') {
+            previousState = gameState;
+            gameState = STATE_SETTINGS;
+        }
+        return false;
+    }
+
+    if (gameState === STATE_SETTINGS) {
+        if (key === 'S' || key === 's' || keyCode === 27) {
+            gameState = previousState;
+        }
         return false;
     }
 
@@ -1043,6 +1139,12 @@ function keyPressed() {
     if (gameState === STATE_PLAYING) {
         if (key === 'P' || key === 'p' || keyCode === 27) {
             gameState = STATE_PAUSED;
+            return false;
+        }
+        
+        if (key === 'S' || key === 's') {
+            previousState = gameState;
+            gameState = STATE_SETTINGS;
             return false;
         }
 
