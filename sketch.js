@@ -296,37 +296,32 @@ function createMushroom(x, y) {
 
 // --- Extension 3: Enemy Constructor ---
 function Enemy(x, y, range) {
-    this.x = x; this.y = y; this.range = range; this.currentX = x; this.inc = 1;
-    this.update = function() {
-        let nextX = this.currentX + this.inc;
-        if (nextX >= this.x + this.range || nextX <= this.x) { this.inc *= -1; return; }
-        let isCliffAhead = false;
-        for (let c of canyons) if (nextX > c.x_pos - 5 && nextX < c.x_pos + c.width + 5) { isCliffAhead = true; break; }
-        if (isCliffAhead) this.inc *= -1; else this.currentX = nextX;
-    };
-    this.draw = function() {
-        this.update(); 
-        
-        // GROUND SHADOW (Follows currentX, stays on floor)
-        push();
-        let hover = sin(frameCount * 0.15) * 5;
-        let shadowAlpha = map(hover, -5, 5, 40, 20);
-        let shadowScale = map(hover, -5, 5, 1.1, 0.9);
-        fill(0, shadowAlpha);
-        noStroke();
-        ellipse(this.currentX, this.y, 40 * shadowScale, 10);
-        pop();
+    this.x = x;
+    this.y = y;
+    this.range = range;
+    this.currentX = x;
+    this.inc = 1;
 
-        push(); translate(this.currentX, this.y);
-        translate(0, hover);
-        noStroke(); fill(150, 220, 255, 200); beginShape(); vertex(-20, 0); vertex(-25, -20); vertex(-10, -45); vertex(10, -45); vertex(25, -20); vertex(20, 0); endShape(CLOSE);
-        fill(200, 240, 255, 150); triangle(-10, -45, 0, -10, 10, -45); triangle(-25, -20, 0, -10, -20, 0); triangle(25, -20, 0, -10, 20, 0);
-        let eyePulse = 150 + sin(frameCount * 0.1) * 105; fill(0, eyePulse, 255); ellipse(-8, -30, 8, 8); ellipse(8, -30, 8, 8);
-        fill(0, 100, 255, 50); ellipse(-8, -30, 15, 15); ellipse(8, -30, 15, 15); fill(255, 100); ellipse(0, -20, 10, 15); pop();
+    this.update = function() {
+        this.currentX += this.inc;
+        if (this.currentX >= this.x + this.range) {
+            this.inc = -1;
+        } else if (this.currentX < this.x) {
+            this.inc = 1;
+        }
     };
+
+    this.draw = function() {
+        this.update();
+        fill(255, 0, 0);
+        ellipse(this.currentX, this.y - 10, 20, 20);
+    };
+
     this.checkContact = function(gc_x, gc_y) {
-        var d = dist(gc_x, gc_y, this.currentX, this.y - 20);
-        if (d < 40) return true;
+        var d = dist(gc_x, gc_y, this.currentX, this.y - 10);
+        if (d < 20) {
+            return true;
+        }
         return false;
     };
 }
@@ -392,7 +387,10 @@ function startGame() {
 
     generateMushrooms();
     
-    generateCollectables(); generateEnemies(); totalCollectables = collectables.length;
+    generateCollectables(); 
+    enemies = [];
+    enemies.push(new Enemy(1200, floorPos_y, 100)); // Push test enemy
+    totalCollectables = collectables.length;
 }
 
 function generateCheckpoints() {
@@ -478,13 +476,7 @@ function generateStoryObjects() {
 }
 
 function generateEnemies() {
-    enemies = []; let enemySpawnPoints = [1200, 2500, 3500];
-    for (let ex of enemySpawnPoints) {
-        let isValid = true;
-        for (let c of canyons) if (ex > c.x_pos - 20 && ex < c.x_pos + c.width + 20) { isValid = false; break; }
-        if (!isValid) ex += 200;
-        enemies.push(new Enemy(ex, floorPos_y, random(150, 300)));
-    }
+    // Replaced inline in startGame() as per lecture implementation
 }
 
 function generateCanyons() {
@@ -723,12 +715,9 @@ function drawGame() {
     
     for (let e of enemies) { 
         e.draw(); 
-        if (!isHibernating && invincibilityTimer === 0 && e.checkContact(gameChar_x, gameChar_y)) { 
+        if (e.checkContact(gameChar_x, gameChar_y)) { 
             lives--; 
-            screenShakeAmount = 15;
-            sounds.play('death'); 
-            invincibilityTimer = 90; 
-            if (lives > 0) respawnCharacter(); 
+            startGame(); 
         } 
     }
     
