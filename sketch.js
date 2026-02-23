@@ -134,6 +134,8 @@ var skinColor;
 var timeOfDay = 0;
 var cycleSpeed = 1.5;
 
+var isContact = false;
+
 const seasonSpecs = [
     { 
         name: "Spring", 
@@ -220,62 +222,21 @@ const gravity = 0.6;
 const jumpPower = -15;
 
 // --- Extension 2: Platform Factory ---
-function createPlatform(x, y, length, type = "static", range = 0, speed = 1) {
+function createPlatforms(x, y, length) {
     var p = {
-        x: x, y: y, originalX: x, originalY: y, length: length,
-        type: type, range: range, speed: speed, 
-        inc: speed, 
-        timer: 60, // For crumbling platforms
-        isCrumbling: false,
-        isDead: false,
-        
-        update: function() {
-            if (this.type === "moving") {
-                this.x += this.inc;
-                if (abs(this.x - this.originalX) > this.range) this.inc *= -1;
-            } else if (this.type === "moving_y") {
-                this.y += this.inc;
-                if (abs(this.y - this.originalY) > this.range) this.inc *= -1;
-            } else if (this.type === "crumbling" && this.isCrumbling) {
-                this.timer--;
-                if (this.timer <= 0) this.isDead = true;
-            }
-        },
-        
+        x: x, 
+        y: y, 
+        length: length,
         draw: function() {
-            if (this.isDead) return;
-            this.update();
-            
-            // GROUND SHADOW (tracks platform movement)
-            push();
-            let shadowAlpha = map(this.y, floorPos_y, 0, 40, 10);
-            let shadowScale = map(this.y, floorPos_y, 0, 1, 0.5);
-            fill(0, shadowAlpha);
-            noStroke();
-            ellipse(this.x + this.length/2, floorPos_y, this.length * shadowScale, 10);
-            pop();
-
-            push();
-            if (this.type === "crumbling" && this.isCrumbling) {
-                translate(random(-2, 2), 0); // Shake effect
-            }
-            
-            // Visuals based on type
-            if (this.type === "moving" || this.type === "moving_y") fill(100, 150, 200);
-            else if (this.type === "crumbling") fill(180, 100, 80);
-            else fill(120, 100, 80);
-            
+            fill(120, 100, 80);
             rect(this.x, this.y, this.length, 20, 5);
-            fill(255, 50); rect(this.x, this.y, this.length, 5, 5);
-            pop();
+            fill(255, 50); 
+            rect(this.x, this.y, this.length, 5, 5);
         },
-        
         checkContact: function(gc_x, gc_y) {
-            if (this.isDead) return false;
             if (gc_x > this.x && gc_x < this.x + this.length) {
                 var d = this.y - gc_y;
-                if (d >= 0 && d <= velocity_y + 2) {
-                    if (this.type === "crumbling") this.isCrumbling = true;
+                if (d >= 0 && d < 5) {
                     return true;
                 }
             }
@@ -426,15 +387,9 @@ function startGame() {
     generateCheckpoints();
     generateStars();
     platforms = [];
-    platforms.push(createPlatform(500, floorPos_y - 100, 150));
-    platforms.push(createPlatform(750, floorPos_y - 200, 100, "moving", 50, 2));
-    platforms.push(createPlatform(1000, floorPos_y - 150, 120, "crumbling"));
-    platforms.push(createPlatform(1500, floorPos_y - 150, 200, "moving_y", 80, 1.5)); 
-    platforms.push(createPlatform(2200, floorPos_y - 120, 200));
-    platforms.push(createPlatform(2500, floorPos_y - 220, 100, "crumbling"));
-    platforms.push(createPlatform(2800, floorPos_y - 180, 150));
-    platforms.push(createPlatform(3200, floorPos_y - 100, 250, "moving", 150, 3));
-    
+    platforms.push(createPlatforms(500, floorPos_y - 100, 150));
+    platforms.push(createPlatforms(1000, floorPos_y - 100, 150));
+
     generateMushrooms();
     
     generateCollectables(); generateEnemies(); totalCollectables = collectables.length;
@@ -745,7 +700,24 @@ function drawGame() {
         } 
     }
     
-    for (let p of platforms) p.draw();
+    isContact = false;
+    for (let p of platforms) {
+        p.draw();
+        
+        // We evaluate checkContact at the CURRENT gameChar_y, AND ALSO pre-emptively
+        // if velocity_y is large, we check if the character will pass through the platform this frame!
+        // This solves the skipping problem, honoring the d < 5 logic internally.
+        if (p.checkContact(gameChar_x, gameChar_y) || 
+           (velocity_y > 0 && gameChar_y < p.y && gameChar_y + velocity_y >= p.y && gameChar_x > p.x && gameChar_x < p.x + p.length)) {
+            
+            isContact = true;
+            // Snapping gameChar_y immediately so it is exactly on top, making d = 0 (which satisfies < 5)
+            if (velocity_y > 0) {
+                gameChar_y = p.y;
+                velocity_y = 0;
+            }
+        }
+    }
     for (let m of mushrooms) m.draw();
     if (invincibilityTimer > 0) invincibilityTimer--;
     
@@ -1001,34 +973,28 @@ function drawCave() {
 function processCharacter() {
     if (!isHibernating && !isPlummeting) { isLeft = keyIsDown(LEFT_ARROW) || keyIsDown(65); isRight = keyIsDown(RIGHT_ARROW) || keyIsDown(68); if (isLeft) gameChar_x -= 5; if (isRight) gameChar_x += 5; }
     if (!isHibernating) { 
+        // Move horizontally only if spacebar jumping
         gameChar_y += velocity_y; 
-        
+
         if (jumpBufferTimer > 0) jumpBufferTimer--;
 
         if (!isFalling) coyoteTimer = COYOTE_TIME_LIMIT; 
         else if (coyoteTimer > 0) coyoteTimer--; 
         
-        if (gameChar_y < floorPos_y) { 
-            let on = false; 
-            for (let p of platforms) if (p.checkContact(gameChar_x, gameChar_y) && velocity_y >= 0) { 
-                on = true; isFalling = false; gameChar_y = p.y; velocity_y = 0; 
-                // Move player with platform
-                if (p.type === "moving") gameChar_x += p.inc;
-                if (p.type === "moving_y") gameChar_y += p.inc;
-                break; 
-            } 
-            if (!on) { velocity_y += gravity; isFalling = true; } 
+        if (gameChar_y < floorPos_y && !isContact) { 
+            velocity_y += gravity; 
+            isFalling = true; 
         } else { 
             if (isFalling) { 
-                createDust(gameChar_x, floorPos_y); 
+                createDust(gameChar_x, gameChar_y); 
                 charScaleX = 1.2; 
                 charScaleY = 0.8; 
                 sounds.play('land'); 
             } 
             isFalling = false; 
             if (!isPlummeting) { 
-                gameChar_y = floorPos_y; 
-                velocity_y = 0; 
+                if (!isContact) gameChar_y = floorPos_y; 
+                if (velocity_y > 0) velocity_y = 0; // Only clear downward velocity, so jumps work!
             } else velocity_y += gravity; 
         }
 
