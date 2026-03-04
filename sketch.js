@@ -99,6 +99,7 @@ let coinAngle          = 0;
 let tutorialAlpha      = 255;
 let heartPulse         = 0;
 let invincibilityTimer = 0;
+let knockbackVX        = 0;
 let maxLevelDist       = 4500; // Distance to flagpole
 
 // Jump feel
@@ -262,6 +263,37 @@ function createPlatforms(x, y, length) {
     return p;
 }
 
+function createMovingPlatform(x, y, length, type) {
+    let p = {
+        x, y, originX: x, originY: y, length, type,
+        phase: random(TWO_PI),
+
+        update: function() {
+            if (this.type === 'horizontal') {
+                this.x = this.originX + sin(frameCount * 0.02 + this.phase) * 80;
+            } else {
+                this.y = this.originY + sin(frameCount * 0.03 + this.phase) * 40;
+            }
+        },
+
+        draw: function() {
+            fill(80, 60, 100);
+            rect(this.x, this.y, this.length, 20, 5);
+            fill(180, 140, 255, 80);
+            rect(this.x, this.y, this.length, 5, 5);
+        },
+
+        checkContact: function(gc_x, gc_y) {
+            if (gc_x > this.x && gc_x < this.x + this.length) {
+                let d = this.y - gc_y;
+                if (d > -3 && d < 5) return true;
+            }
+            return false;
+        }
+    };
+    return p;
+}
+
 function createMushroom(x, y) {
     return {
         x: x, y: y,
@@ -401,6 +433,54 @@ function Enemy(x, y, range) {
     };
 }
 
+function FlyingEnemy(x, y, range) {
+    this.x        = x;
+    this.y        = y;
+    this.range    = range;
+    this.currentX = x;
+    this.currentY = y;
+    this.inc      = 1;
+    this.phase    = random(TWO_PI);
+
+    this.update = function() {
+        this.currentY += this.inc * 1.5;
+        if (this.currentY >= this.y + this.range / 2) this.inc = -1;
+        else if (this.currentY <= this.y - this.range / 2) this.inc = 1;
+    };
+
+    this.draw = function() {
+        this.update();
+        let bx = this.currentX, by = this.currentY;
+        let flapAngle = sin(frameCount * 0.25 + this.phase) * 0.6;
+        push(); noStroke();
+        fill(30, 20, 40); ellipse(bx, by, 20, 14);
+        // Left wing
+        fill(50, 30, 60, 220);
+        push(); translate(bx, by); rotate(-flapAngle);
+        beginShape();
+        vertex(0,0); bezierVertex(-10,-8,-30,-14,-36,-2);
+        bezierVertex(-28,4,-12,2,0,0);
+        endShape(CLOSE); pop();
+        // Right wing (mirrored)
+        push(); translate(bx, by); rotate(flapAngle); scale(-1,1);
+        beginShape();
+        vertex(0,0); bezierVertex(-10,-8,-30,-14,-36,-2);
+        bezierVertex(-28,4,-12,2,0,0);
+        endShape(CLOSE); pop();
+        // Ears
+        fill(60, 40, 70);
+        triangle(bx-6,by-6, bx-10,by-18, bx-2,by-6);
+        triangle(bx+6,by-6, bx+10,by-18, bx+2,by-6);
+        // Eyes
+        fill(220,30,30); ellipse(bx-4,by-1,5,5); ellipse(bx+4,by-1,5,5);
+        pop();
+    };
+
+    this.checkContact = function(gc_x, gc_y) {
+        return dist(gc_x, gc_y, this.currentX, this.currentY) < 22;
+    };
+}
+
 // ============================================================
 // 5. WORLD GENERATION
 // ============================================================
@@ -437,6 +517,7 @@ function startGame() {
     isPlummeting     = false;
     isHibernating    = false;
     invincibilityTimer = 0;
+    knockbackVX        = 0;
     coyoteTimer      = 0;
     lastCheckpoint   = { x: 100, y: floorPos_y };
 
@@ -453,6 +534,14 @@ function startGame() {
     platforms = [];
     platforms.push(createPlatforms(500,  floorPos_y - 100, 150));
     platforms.push(createPlatforms(1000, floorPos_y - 100, 150));
+    if (level >= 2) {
+        platforms.push(createMovingPlatform(1800, floorPos_y - 130, 120, 'horizontal'));
+        platforms.push(createMovingPlatform(2600, floorPos_y - 180, 100, 'vertical'));
+    }
+    if (level >= 3) {
+        platforms.push(createMovingPlatform(3200, floorPos_y - 150, 110, 'horizontal'));
+        platforms.push(createMovingPlatform(3900, floorPos_y - 200, 100, 'vertical'));
+    }
 
     generateMushrooms();
     generateCollectables(levelConfig);
@@ -474,6 +563,10 @@ function startGame() {
             attempts++;
         }
         enemies.push(new Enemy(safeX, floorPos_y, 100 + i * 20));
+    }
+
+    for (let i = 0; i < levelConfig.flyingEnemyCount; i++) {
+        enemies.push(new FlyingEnemy(1600 + i * 900, floorPos_y - 180 - i * 20, 120));
     }
 
     totalCollectables = collectables.length;
@@ -745,9 +838,10 @@ function getLevelConfig(lvl) {
         canyonCount:      4 + floor((lvl - 1) / 2),
         canyonMinWidth:   80  + (lvl - 1) * 8,
         canyonMaxWidth:   180 + (lvl - 1) * 15,
-        collectableCount: 5 + (lvl - 1),
-        seasonSpeed:      1.5 + (lvl - 1) * 0.25,
-        flagpoleX:        4500
+        collectableCount:  5 + (lvl - 1),
+        seasonSpeed:       1.5 + (lvl - 1) * 0.25,
+        flagpoleX:         4500,
+        flyingEnemyCount:  max(0, lvl - 1)
     };
 }
 
@@ -812,6 +906,7 @@ function updateGame() {
     // Platform contact resolution
     isContact = false;
     for (let p of platforms) {
+        if (typeof p.update === 'function') p.update();
         // Also pre-emptively check if the character will pass through this frame
         // (solves the tunneling problem for high velocity)
         if (p.checkContact(gameChar_x, gameChar_y) ||
@@ -819,8 +914,9 @@ function updateGame() {
             gameChar_x > p.x && gameChar_x < p.x + p.length)) {
 
             isContact = true;
-            // Snap to platform top so d = 0, satisfying checkContact's d < 5 condition
-            if (velocity_y > 0) {
+            // Snap to platform top. >= 0 also covers standing (velocity=0)
+            // so moving platforms carry the player each frame.
+            if (velocity_y >= 0) {
                 gameChar_y = p.y;
                 velocity_y = 0;
             }
@@ -829,9 +925,17 @@ function updateGame() {
 
     // Enemy hit detection
     for (let e of enemies) {
-        if (e.checkContact(gameChar_x, gameChar_y)) {
+        if (invincibilityTimer <= 0 && e.checkContact(gameChar_x, gameChar_y)) {
             lives--;
-            startGame();
+            sounds.play('death');
+            screenShakeAmount  = 8;
+            let ex  = (e.currentX !== undefined) ? e.currentX : e.x;
+            let dir = (gameChar_x >= ex) ? 1 : -1;
+            knockbackVX        = dir * 9;
+            velocity_y         = -8;
+            invincibilityTimer = 90;
+            if (lives < 1) gameState = STATE_GAMEOVER;
+            break;
         }
     }
 
@@ -924,6 +1028,11 @@ function processCharacter() {
         isRight = keyIsDown(RIGHT_ARROW) || keyIsDown(68);
         if (isLeft)  gameChar_x -= 5;
         if (isRight) gameChar_x += 5;
+        if (knockbackVX !== 0) {
+            gameChar_x  += knockbackVX;
+            knockbackVX *= 0.75;
+            if (abs(knockbackVX) < 0.2) knockbackVX = 0;
+        }
     }
 
     if (!isHibernating) {
@@ -990,6 +1099,7 @@ function respawnCharacter() {
     gameChar_x         = lastCheckpoint.x;
     gameChar_y         = lastCheckpoint.y;
     velocity_y         = 0;
+    knockbackVX        = 0;
     isPlummeting       = false;
     isFalling          = false;
     isLeft             = false;
@@ -2279,4 +2389,9 @@ function mousePressed() {
 }
 
 function mouseWheel() { return false; }
-function keyReleased() { return false; }
+function keyReleased() {
+    if (gameState === STATE_PLAYING && keyCode === 32) {
+        if (velocity_y < 0) velocity_y *= 0.3;
+    }
+    return false;
+}
