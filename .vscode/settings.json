@@ -1,3 +1,7 @@
 {
-    "liveServer.settings.port": 5501
+    "liveServer.settings.port": 5501,
+    
+    //Ensure the live server uses Chrome 
+    "liveServer.settings.CustomBrowser": "microsoft-edge"
+    
 }

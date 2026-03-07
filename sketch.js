@@ -321,8 +321,10 @@ function createMovingPlatform(x, y, length, type) {
     length,
     type,
     phase: random(TWO_PI),
+    prevX: x,
 
     update: function () {
+      this.prevX = this.x;
       if (this.type === "horizontal") {
         this.x = this.originX + sin(frameCount * 0.02 + this.phase) * 80;
       } else {
@@ -344,6 +346,13 @@ function createMovingPlatform(x, y, length, type) {
       }
       return false;
     },
+
+    applyVelocity: function () {
+      if (this.type === "horizontal") {
+        let diff = this.x - this.prevX;
+        gameChar_x += diff;
+      }
+    },
   };
   return p;
 }
@@ -352,49 +361,89 @@ function createMushroom(x, y) {
   return {
     x,
     y,
+    originX: x,
+    inc: 0.8,
+    range: 60,
+    update: function () {
+      this.x += this.inc;
+      if (this.x > this.originX + this.range) {
+        this.inc = -0.8;
+      } else if (this.x < this.originX - this.range) {
+        this.inc = 0.8;
+      }
+    },
     draw: function () {
+      this.update();
       push();
       translate(this.x, this.y);
       let bounce = sin(frameCount * 0.1) * 3;
+      let walkSquish = sin(frameCount * 0.2) * 2;
       let squish = map(bounce, -3, 3, 0.9, 1.1);
       noStroke();
 
-      // Ground shadow (stays on ground)
+      let facing = this.inc > 0 ? 1 : -1;
+
+      // Ground shadow
       fill(0, 50);
       ellipse(0, 0, 40 * squish, 10);
 
-      // Stem
-      fill(240, 230, 210);
+      // Feet
+      fill(200, 180, 160);
+      let step = sin(frameCount * 0.3) * 4;
+      ellipse(-6, -2, 8, 6 + step);
+      ellipse(6, -2, 8, 6 - step);
+
+      // Stem (Body)
+      fill(250, 240, 220);
       beginShape();
-      vertex(-8, 0);
-      bezierVertex(-10, -10, -5, -20, -5, -25);
-      vertex(5, -25);
-      bezierVertex(5, -20, 10, -10, 8, 0);
+      vertex(-10, 0);
+      bezierVertex(-12, -10, -8, -20, -6, -25);
+      vertex(6, -25);
+      bezierVertex(8, -20, 12, -10, 10, 0);
       endShape(CLOSE);
 
-      // Cap
-      fill(220, 60, 60);
-      arc(0, -25 + bounce, 70 * squish, 45 / squish, PI, TWO_PI, CHORD);
+      // Eyes
+      fill(30);
+      ellipse(facing * 3 - 3, -12, 3, 5);
+      ellipse(facing * 3 + 3, -12, 3, 5);
 
-      // Cap highlight (rim light)
+      // Blush
+      fill(255, 100, 100, 150);
+      ellipse(facing * 3 - 7, -10, 4, 3);
+      ellipse(facing * 3 + 7, -10, 4, 3);
+
+      // Cap
+      fill(230, 50, 50);
+      arc(
+        0,
+        -20 + bounce + walkSquish,
+        75 * squish,
+        50 / squish,
+        PI,
+        TWO_PI,
+        CHORD,
+      );
+
+      // Cap highlight
       fill(255, 120, 120, 180);
       arc(
         0,
-        -29 + bounce,
-        60 * squish,
-        35 / squish,
+        -24 + bounce + walkSquish,
+        65 * squish,
+        40 / squish,
         PI + 0.4,
         TWO_PI - 0.4,
         CHORD,
       );
 
-      // Dots (with slight depth)
-      fill(255, 230);
-      ellipse(-15, -38 + bounce, 10, 8);
-      ellipse(15, -35 + bounce, 12, 10);
-      ellipse(0, -45 + bounce, 14, 12);
-      ellipse(-20, -30 + bounce, 6, 5);
-      ellipse(22, -28 + bounce, 7, 6);
+      // Dots
+      fill(255, 240, 240);
+      ellipse(-18, -32 + bounce + walkSquish, 12, 10);
+      ellipse(18, -28 + bounce + walkSquish, 14, 12);
+      ellipse(0, -40 + bounce + walkSquish, 16, 14);
+      ellipse(-25, -22 + bounce + walkSquish, 8, 6);
+      ellipse(25, -20 + bounce + walkSquish, 9, 7);
+
       pop();
     },
     checkContact: function (gc_x, gc_y) {
@@ -495,6 +544,333 @@ function Enemy(x, y, range) {
   };
 }
 
+function FoxEnemy(x, y, range) {
+  this.x = x;
+  this.y = y;
+  this.range = range;
+  this.currentX = x;
+  this.inc = 1.3; // slightly faster than wolf
+
+  this.update = function () {
+    this.currentX += this.inc;
+    if (this.currentX >= this.x + this.range) {
+      this.inc = -1.3;
+    } else if (this.currentX < this.x) {
+      this.inc = 1.3;
+    }
+  };
+
+  this.draw = function () {
+    this.update();
+
+    let ex = this.currentX;
+    let ey = this.y;
+    let facing = this.inc >= 0 ? 1 : -1;
+
+    push();
+    noStroke();
+
+    // Ground shadow
+    fill(0, 40);
+    ellipse(ex, ey, 40, 8);
+
+    // Fluffy Tail
+    fill(210, 100, 30);
+    push();
+    translate(ex - facing * 16, ey - 12);
+    rotate(facing * 0.4 + sin(frameCount * 0.25) * 0.4);
+    ellipse(0, -6, 22, 10);
+    fill(255); // White tip
+    ellipse(-facing * 8, -6, 8, 8);
+    pop();
+
+    // Body
+    fill(220, 110, 40);
+    ellipse(ex, ey - 14, 32, 16);
+
+    // Belly
+    fill(255, 240, 230);
+    ellipse(ex, ey - 10, 24, 8);
+
+    // Head
+    fill(220, 110, 40);
+    ellipse(ex + facing * 18, ey - 22, 20, 16);
+    fill(255); // White snout/cheeks
+    ellipse(ex + facing * 24, ey - 20, 14, 10);
+
+    // Nose
+    fill(20);
+    ellipse(ex + facing * 30, ey - 20, 4, 4);
+
+    // Eye
+    fill(20);
+    ellipse(ex + facing * 20, ey - 24, 4, 4);
+
+    // Ears
+    fill(220, 110, 40);
+    triangle(
+      ex + facing * 12,
+      ey - 28,
+      ex + facing * 18,
+      ey - 36,
+      ex + facing * 20,
+      ey - 26,
+    );
+    fill(40);
+    triangle(
+      ex + facing * 14,
+      ey - 28,
+      ex + facing * 18,
+      ey - 34,
+      ex + facing * 18,
+      ey - 26,
+    );
+
+    // Legs
+    fill(40); // Dark legs
+    let step = sin(frameCount * 0.3) * 6;
+    rect(ex - 10, ey - 8, 4, 10, 2);
+    rect(ex - 4, ey - 8, 4, 10 - step, 2);
+    rect(ex + 4, ey - 8, 4, 10 + step, 2);
+    rect(ex + 10, ey - 8, 4, 10, 2);
+
+    pop();
+  };
+
+  this.checkContact = function (gc_x, gc_y) {
+    return dist(gc_x, gc_y, this.currentX, this.y - 10) < 18;
+  };
+}
+
+function SnakeEnemy(x, y, range) {
+  this.x = x;
+  this.y = y;
+  this.range = range;
+  this.currentX = x;
+  this.inc = 0.8; // Slow slither
+
+  this.update = function () {
+    this.currentX += this.inc;
+    if (this.currentX >= this.x + this.range) {
+      this.inc = -0.8;
+    } else if (this.currentX < this.x) {
+      this.inc = 0.8;
+    }
+  };
+
+  this.draw = function () {
+    this.update();
+
+    let ex = this.currentX;
+    let ey = this.y;
+    let facing = this.inc >= 0 ? 1 : -1;
+
+    push();
+    noStroke();
+
+    // Ground shadow
+    fill(0, 40);
+    ellipse(ex, ey, 48, 6);
+
+    // Slithering Body
+    fill(50, 120, 60);
+    let segments = 6;
+    let spacing = 6;
+    for (let i = 0; i < segments; i++) {
+      let offset = sin(frameCount * 0.15 + i * 0.5) * 4;
+      ellipse(ex - facing * (i * spacing), ey - 5 + offset, 12, 10);
+
+      // Pattern
+      fill(80, 150, 40);
+      ellipse(ex - facing * (i * spacing), ey - 8 + offset, 6, 4);
+      fill(50, 120, 60); // reset for next segment
+    }
+
+    // Head
+    let headOffset = sin(frameCount * 0.15) * 4;
+    ellipse(ex + facing * 8, ey - 6 + headOffset, 16, 12);
+
+    // Eye (red)
+    fill(200, 30, 30);
+    ellipse(ex + facing * 12, ey - 8 + headOffset, 4, 4);
+
+    // Tongue flick
+    if (frameCount % 60 < 10) {
+      stroke(200, 50, 50);
+      strokeWeight(2);
+      noFill();
+      beginShape();
+      vertex(ex + facing * 16, ey - 6 + headOffset);
+      vertex(ex + facing * 22, ey - 6 + headOffset);
+      vertex(ex + facing * 26, ey - 8 + headOffset);
+      endShape();
+      line(
+        ex + facing * 22,
+        ey - 6 + headOffset,
+        ex + facing * 26,
+        ey - 4 + headOffset,
+      ); // Fork
+    }
+
+    pop();
+  };
+
+  this.checkContact = function (gc_x, gc_y) {
+    return dist(gc_x, gc_y, this.currentX, this.y - 5) < 20; // Lower hitbox since snake is flat
+  };
+}
+
+function RabbitEnemy(x, y, range) {
+  this.x = x;
+  this.y = y;
+  this.range = range;
+  this.currentX = x;
+  this.currentY = y;
+  this.inc = 1.5;
+  this.jumpPower = -6;
+  this.vy = 0;
+  this.isGrounded = true;
+
+  this.update = function () {
+    if (this.isGrounded && random(100) < 5) {
+      this.vy = this.jumpPower;
+      this.isGrounded = false;
+    }
+
+    if (!this.isGrounded) {
+      this.vy += 0.4; // gravity
+      this.currentY += this.vy;
+      this.currentX += this.inc * 1.5; // moves forward while hopping
+
+      if (this.currentY >= this.y) {
+        this.currentY = this.y;
+        this.vy = 0;
+        this.isGrounded = true;
+      }
+    } else {
+      this.currentX += this.inc * 0.5; // walks slowly when grounded
+    }
+
+    if (this.currentX >= this.x + this.range) {
+      this.inc = -1.5;
+    } else if (this.currentX < this.x) {
+      this.inc = 1.5;
+    }
+  };
+
+  this.draw = function () {
+    this.update();
+
+    let ex = this.currentX;
+    let ey = this.currentY;
+    let facing = this.inc >= 0 ? 1 : -1;
+
+    push();
+    noStroke();
+
+    // Shadow stays on the ground
+    fill(0, 40);
+    ellipse(ex, this.y, 24, 6);
+
+    // Body
+    fill(200, 190, 180);
+    ellipse(ex, ey - 12, 20, 16);
+
+    // Tail
+    fill(255);
+    ellipse(ex - facing * 10, ey - 10, 8, 8);
+
+    // Head
+    fill(200, 190, 180);
+    ellipse(ex + facing * 8, ey - 18, 14, 14);
+
+    // Ears
+    fill(200, 190, 180);
+    ellipse(ex + facing * 4, ey - 26, 4, 14);
+    ellipse(ex + facing * 8, ey - 28, 4, 14);
+
+    // Eye (red or pink)
+    fill(200, 100, 100);
+    ellipse(ex + facing * 10, ey - 20, 3, 3);
+
+    pop();
+  };
+
+  this.checkContact = function (gc_x, gc_y) {
+    return dist(gc_x, gc_y, this.currentX, this.currentY - 10) < 18;
+  };
+}
+
+function PorcupineEnemy(x, y, range) {
+  this.x = x;
+  this.y = y;
+  this.range = range;
+  this.currentX = x;
+  this.inc = 0.5; // Very slow
+
+  this.update = function () {
+    this.currentX += this.inc;
+    if (this.currentX >= this.x + this.range) {
+      this.inc = -0.5;
+    } else if (this.currentX < this.x) {
+      this.inc = 0.5;
+    }
+  };
+
+  this.draw = function () {
+    this.update();
+
+    let ex = this.currentX;
+    let ey = this.y;
+    let facing = this.inc >= 0 ? 1 : -1;
+
+    push();
+    noStroke();
+
+    // Ground shadow
+    fill(0, 40);
+    ellipse(ex, ey, 36, 8);
+
+    // Body
+    fill(60, 50, 40);
+    ellipse(ex, ey - 14, 32, 22);
+
+    // Quills
+    stroke(180, 160, 140);
+    strokeWeight(2);
+    let quillPulse = sin(frameCount * 0.1) * 2;
+    for (let i = -12; i <= 12; i += 4) {
+      line(ex + i, ey - 24, ex + i - facing * 4, ey - 32 - quillPulse);
+      line(ex + i, ey - 18, ex + i - facing * 6, ey - 26 - quillPulse);
+    }
+    noStroke();
+
+    // Head
+    fill(70, 60, 50);
+    ellipse(ex + facing * 16, ey - 12, 14, 12);
+
+    // Eye
+    fill(0);
+    ellipse(ex + facing * 18, ey - 14, 3, 3);
+
+    // Snout/Nose
+    fill(20);
+    ellipse(ex + facing * 22, ey - 10, 4, 4);
+
+    // Little Legs
+    fill(30);
+    let step = sin(frameCount * 0.4) * 2;
+    rect(ex - 8, ey - 6, 4, 6 - step, 2);
+    rect(ex + 8, ey - 6, 4, 6 + step, 2);
+
+    pop();
+  };
+
+  this.checkContact = function (gc_x, gc_y) {
+    return dist(gc_x, gc_y, this.currentX, this.y - 12) < 22; // Slightly larger hitbox due to quills
+  };
+}
+
 function FlyingEnemy(x, y, range) {
   this.x = x;
   this.y = y;
@@ -549,6 +925,86 @@ function FlyingEnemy(x, y, range) {
 
   this.checkContact = function (gc_x, gc_y) {
     return dist(gc_x, gc_y, this.currentX, this.currentY) < 22;
+  };
+}
+
+function OwlEnemy(x, y, range) {
+  this.x = x;
+  this.y = y;
+  this.range = range;
+  this.currentX = x;
+  this.currentY = y;
+  this.inc = 0.8; // Slower patrol speed
+  this.phase = random(TWO_PI);
+
+  this.update = function () {
+    this.currentY += this.inc * 0.8;
+    if (this.currentY >= this.y + this.range / 2) this.inc = -0.8;
+    else if (this.currentY <= this.y - this.range / 2) this.inc = 0.8;
+  };
+
+  this.draw = function () {
+    this.update();
+    const bx = this.currentX;
+    const by = this.currentY;
+    const flapAngle = sin(frameCount * 0.15 + this.phase) * 0.4; // Slower, wider flap
+
+    function drawWing(angle, mirrored) {
+      push();
+      translate(bx, by);
+      rotate(angle);
+      if (mirrored) scale(-1, 1);
+      beginShape();
+      vertex(0, 0);
+      bezierVertex(-15, -10, -40, -18, -48, -4);
+      bezierVertex(-38, 8, -16, 4, 0, 0);
+      endShape(CLOSE);
+      pop();
+    }
+
+    push();
+    noStroke();
+
+    // Body
+    fill(90, 75, 60);
+    ellipse(bx, by, 24, 28);
+
+    // Belly fluff
+    fill(180, 170, 160);
+    ellipse(bx, by + 4, 16, 18);
+
+    // Wings
+    fill(80, 65, 50);
+    drawWing(-flapAngle, false); // Left wing
+    drawWing(flapAngle, true); // Right wing (mirrored)
+
+    // Ears/Tufts
+    fill(90, 75, 60);
+    triangle(bx - 8, by - 12, bx - 14, by - 22, bx - 4, by - 12);
+    triangle(bx + 8, by - 12, bx + 14, by - 22, bx + 4, by - 12);
+
+    // Face Disc
+    fill(210, 200, 190);
+    ellipse(bx - 6, by - 6, 14, 14);
+    ellipse(bx + 6, by - 6, 14, 14);
+
+    // Eyes
+    fill(220, 180, 40);
+    ellipse(bx - 6, by - 6, 8, 8);
+    ellipse(bx + 6, by - 6, 8, 8);
+    fill(0);
+    ellipse(bx - 6, by - 6, 4, 4);
+    ellipse(bx + 6, by - 6, 4, 4);
+
+    // Beak
+    fill(50, 40, 30);
+    triangle(bx - 3, by, bx + 3, by, bx, by + 4);
+
+    pop();
+  };
+
+  this.checkContact = function (gc_x, gc_y) {
+    return dist(gc_x, gc_y, this.currentX, this.currentY) < 24; // Slightly larger hitbox than bat
   };
 }
 
@@ -631,12 +1087,22 @@ function startGame() {
       }
       attempts++;
     }
-    enemies.push(new Enemy(safeX, floorPos_y, 100 + i * 20));
+    let groundEnemyTypes = [
+      Enemy,
+      FoxEnemy,
+      SnakeEnemy,
+      RabbitEnemy,
+      PorcupineEnemy,
+    ];
+    let RandomEnemy = random(groundEnemyTypes);
+    enemies.push(new RandomEnemy(safeX, floorPos_y, 100 + i * 20));
   }
 
+  let flyingEnemyTypes = [FlyingEnemy, OwlEnemy];
   for (let i = 0; i < levelConfig.flyingEnemyCount; i++) {
+    let RandomFlying = random(flyingEnemyTypes);
     enemies.push(
-      new FlyingEnemy(1600 + i * 900, floorPos_y - 180 - i * 20, 120),
+      new RandomFlying(1600 + i * 900, floorPos_y - 180 - i * 20, 120),
     );
   }
 
@@ -645,7 +1111,13 @@ function startGame() {
 
 function generateCheckpoints() {
   checkpoints = [];
-  let targets = [1000, 2000, 3000, 4000];
+
+  // Create checkpoints dynamically based on flagpole position
+  let numCheckpoints = floor(levelConfig.flagpoleX / 1000);
+  let targets = [];
+  for (let i = 1; i <= numCheckpoints; i++) {
+    targets.push(i * 1000);
+  }
 
   for (let tx of targets) {
     let safeX = tx;
@@ -669,7 +1141,13 @@ function generateCheckpoints() {
 
 function generateMushrooms() {
   mushrooms = [];
-  let mushroomSpawnX = [1300, 2000, 3800];
+
+  // Distributed across the level length
+  let numMushrooms = max(2, floor(levelConfig.flagpoleX / 1500));
+  let mushroomSpawnX = [];
+  for (let i = 1; i <= numMushrooms; i++) {
+    mushroomSpawnX.push(i * 1300 + random(-200, 200));
+  }
 
   for (let mx of mushroomSpawnX) {
     let safeX = mx;
@@ -734,7 +1212,7 @@ function generateCanyons(config) {
   canyons.push({ x_pos: 1800, width: 220 });
 
   for (let i = 0; i < config.canyonCount; i++) {
-    let cx = random(500, 4000);
+    let cx = random(500, config.flagpoleX - 300);
     let cw = random(config.canyonMinWidth, config.canyonMaxWidth);
     let valid = true;
 
@@ -779,7 +1257,7 @@ function generateCollectables(config) {
   collectables.push({ x_pos: 875, y_pos: floorPos_y - 330, isFound: false });
 
   for (let i = 0; i < config.collectableCount; i++) {
-    let cx = random(200, 4000);
+    let cx = random(200, config.flagpoleX - 100);
     let valid = true;
 
     for (let c of canyons) {
@@ -822,7 +1300,7 @@ function initializeSeasons() {
 function generateTrees() {
   trees = [];
   for (let i = 0; i < 20; i++) {
-    let tx = random(-2000, 2900);
+    let tx = random(-2000, levelConfig.flagpoleX + 1000);
     let valid = true;
 
     for (let c of canyons) {
@@ -863,7 +1341,7 @@ function generateMountains() {
   mountains = [];
   for (let i = 0; i < 15; i++) {
     mountains.push({
-      x: random(-2000, 3000),
+      x: random(-2000, levelConfig.flagpoleX + 1000),
       width: random(200, 500),
       height: random(200, 450),
       color: random(80, 180),
@@ -884,7 +1362,7 @@ function generateClouds() {
       });
     }
     clouds.push({
-      x: random(-2000, 3000),
+      x: random(-2000, levelConfig.flagpoleX + 1000),
       y: random(60, 180),
       puffs: puffs,
       speed: random(0.2, 0.8),
@@ -1088,6 +1566,11 @@ function updateGame() {
       if (velocity_y >= 0) {
         gameChar_y = p.y;
         velocity_y = 0;
+
+        // If it's a moving platform, apply its horizontal velocity to the character
+        if (typeof p.applyVelocity === "function") {
+          p.applyVelocity();
+        }
       }
     }
   }
@@ -1303,6 +1786,7 @@ function checkPlayerDie() {
     textSize(30);
     fill(255);
     text("The Freeze takes you. Press Space.", width / 2, height / 2);
+    // Note: The actual key handling for this state is inside keyPressed()
   }
 }
 
@@ -1669,7 +2153,7 @@ function drawClouds() {
     }
 
     c.x += c.speed;
-    if (c.x > 4500) c.x = -1500;
+    if (c.x > levelConfig.flagpoleX + 1500) c.x = -1500;
   }
 }
 
@@ -1703,15 +2187,57 @@ function drawTrees() {
     noStroke();
 
     if (s.name === "Winter") {
-      // Bare winter branches with snow
-      stroke(80, 50, 30);
-      strokeWeight(3);
-      line(cx, t.y - t.trunkH, cx - 30, t.y - t.trunkH - 40);
-      line(cx, t.y - t.trunkH, cx + 30, t.y - t.trunkH - 35);
-      noStroke();
-      fill(255);
-      ellipse(cx - 15, t.y - t.trunkH - 20, 10, 5);
-      ellipse(cx + 15, t.y - t.trunkH - 18, 12, 6);
+      let foliageY = t.y - t.trunkH * 0.95;
+      let sz = t.canopySize * 0.9;
+
+      // Base dark evergreen color
+      let pineColor = color(30, 60, 50);
+      let snowColor = color(240, 245, 255);
+
+      // 3 Layers of triangular pine branches
+      for (let i = 0; i < 3; i++) {
+        let layerY = foliageY - i * sz * 0.35;
+        let layerW = sz * (1 - i * 0.25);
+        let layerH = sz * 0.6;
+
+        // Pine branch layer
+        fill(pineColor);
+        triangle(
+          cx - layerW / 2,
+          layerY + layerH / 2,
+          cx + layerW / 2,
+          layerY + layerH / 2,
+          cx,
+          layerY - layerH / 2,
+        );
+
+        // Snow accumulation on top of the layer
+        fill(snowColor);
+        beginShape();
+        vertex(cx, layerY - layerH / 2);
+        vertex(cx - (layerW / 2) * 0.8, layerY + (layerH / 2) * 0.3); // Left snow drape
+        // Wavy bottom edge for snow
+        bezierVertex(
+          cx - layerW / 4,
+          layerY + (layerH / 2) * 0.6,
+          cx,
+          layerY + (layerH / 2) * 0.1,
+          cx + layerW / 4,
+          layerY + (layerH / 2) * 0.5,
+        );
+        vertex(cx + (layerW / 2) * 0.8, layerY + (layerH / 2) * 0.3); // Right snow drape
+        endShape(CLOSE);
+      }
+
+      // Tiny snow dots embedded in the tree
+      fill(255, 200);
+      randomSeed(t.x); // Keep dots consistent per tree
+      for (let j = 0; j < 8; j++) {
+        let dotX = cx + random(-sz * 0.3, sz * 0.3);
+        let dotY = foliageY - random(0, sz * 0.8);
+        ellipse(dotX, dotY, random(3, 5));
+      }
+      randomSeed(); // reset seed
     } else {
       let leafCol = lerpColor(t.leafColor, s.leaf, 0.5);
       let foliageY = t.y - t.trunkH * 0.9;
@@ -1782,44 +2308,364 @@ function drawGroundAndGrass() {
 function drawCave() {
   let cx = cave.x_pos + cave.width / 2;
 
-  // Cave exterior
-  fill(95, 75, 55);
-  arc(cx, floorPos_y, cave.width, cave.height * 1.2, PI, TWO_PI, CHORD);
-  fill(10, 8, 4);
-  arc(
+  push();
+  noStroke();
+
+  // 1. Deepest Cave Background (Pitch Black Abyss)
+  fill(5, 5, 8);
+  beginShape();
+  vertex(cx - cave.width * 0.55, floorPos_y);
+  bezierVertex(
+    cx - cave.width * 0.45,
+    floorPos_y - cave.height * 0.7,
+    cx - cave.width * 0.2,
+    floorPos_y - cave.height * 0.9,
     cx,
-    floorPos_y - 8,
-    cave.width * 0.65,
-    cave.height * 0.5,
-    PI,
-    TWO_PI,
-    CHORD,
+    floorPos_y - cave.height * 0.95,
   );
+  bezierVertex(
+    cx + cave.width * 0.2,
+    floorPos_y - cave.height * 0.9,
+    cx + cave.width * 0.45,
+    floorPos_y - cave.height * 0.7,
+    cx + cave.width * 0.55,
+    floorPos_y,
+  );
+  endShape(CLOSE);
+
+  // 2. Midground Inner Wall (Dark Purple/Brown depth)
+  fill(30, 20, 25);
+  beginShape();
+  vertex(cx - cave.width * 0.65, floorPos_y);
+  bezierVertex(
+    cx - cave.width * 0.7,
+    floorPos_y - cave.height * 0.8,
+    cx - cave.width * 0.4,
+    floorPos_y - cave.height * 1.1,
+    cx,
+    floorPos_y - cave.height * 1.15,
+  );
+  bezierVertex(
+    cx + cave.width * 0.4,
+    floorPos_y - cave.height * 1.1,
+    cx + cave.width * 0.7,
+    floorPos_y - cave.height * 0.8,
+    cx + cave.width * 0.65,
+    floorPos_y,
+  );
+  // Jagged inner cutout
+  vertex(cx + cave.width * 0.5, floorPos_y);
+  bezierVertex(
+    cx + cave.width * 0.3,
+    floorPos_y - cave.height * 0.6,
+    cx - cave.width * 0.3,
+    floorPos_y - cave.height * 0.6,
+    cx - cave.width * 0.5,
+    floorPos_y,
+  );
+  endShape(CLOSE);
+
+  // Inner Stalactites (Hanging rocks)
+  fill(30, 20, 25);
+  triangle(
+    cx - 30,
+    floorPos_y - cave.height * 0.9,
+    cx - 15,
+    floorPos_y - cave.height * 0.4,
+    cx,
+    floorPos_y - cave.height * 0.9,
+  );
+  triangle(
+    cx + 20,
+    floorPos_y - cave.height * 0.85,
+    cx + 30,
+    floorPos_y - cave.height * 0.5,
+    cx + 45,
+    floorPos_y - cave.height * 0.85,
+  );
+
+  // 3. Main Outer Structure (Massive Jagged Rock Formation)
+  fill(75, 65, 55);
+  beginShape();
+  vertex(cx - cave.width * 0.85, floorPos_y);
+  // Outer rugged shell
+  vertex(cx - cave.width * 0.8, floorPos_y - cave.height * 0.4);
+  vertex(cx - cave.width * 0.6, floorPos_y - cave.height * 0.9);
+  vertex(cx - cave.width * 0.3, floorPos_y - cave.height * 1.3);
+  vertex(cx, floorPos_y - cave.height * 1.45);
+  vertex(cx + cave.width * 0.4, floorPos_y - cave.height * 1.2);
+  vertex(cx + cave.width * 0.7, floorPos_y - cave.height * 0.8);
+  vertex(cx + cave.width * 0.9, floorPos_y - cave.height * 0.3);
+  vertex(cx + cave.width * 0.85, floorPos_y);
+
+  // Cut out the entrance opening smoothly
+  vertex(cx + cave.width * 0.6, floorPos_y);
+  bezierVertex(
+    cx + cave.width * 0.5,
+    floorPos_y - cave.height * 1.0,
+    cx - cave.width * 0.5,
+    floorPos_y - cave.height * 1.0,
+    cx - cave.width * 0.6,
+    floorPos_y,
+  );
+  endShape(CLOSE);
+
+  // Outer Stalactites (Sharp hanging teeth over entrance)
+  fill(75, 65, 55);
+  triangle(
+    cx - 50,
+    floorPos_y - cave.height * 1.05,
+    cx - 35,
+    floorPos_y - cave.height * 0.55,
+    cx - 15,
+    floorPos_y - cave.height * 1.15,
+  );
+  triangle(
+    cx - 5,
+    floorPos_y - cave.height * 1.18,
+    cx + 15,
+    floorPos_y - cave.height * 0.65,
+    cx + 35,
+    floorPos_y - cave.height * 1.15,
+  );
+  triangle(
+    cx + 45,
+    floorPos_y - cave.height * 1.05,
+    cx + 60,
+    floorPos_y - cave.height * 0.6,
+    cx + 75,
+    floorPos_y - cave.height * 0.95,
+  );
+
+  // 4. Overlapping Highlight Rocks (Adds massive layered depth and lighting)
+  fill(95, 85, 75);
+  ellipse(cx - cave.width * 0.45, floorPos_y - cave.height * 0.8, 70, 90);
+  ellipse(cx - cave.width * 0.65, floorPos_y - cave.height * 0.3, 80, 60);
+  ellipse(cx + cave.width * 0.5, floorPos_y - cave.height * 0.75, 90, 110);
+  ellipse(cx + cave.width * 0.75, floorPos_y - cave.height * 0.4, 70, 80);
+  ellipse(cx + cave.width * 0.15, floorPos_y - cave.height * 1.25, 120, 60);
+  ellipse(cx - cave.width * 0.2, floorPos_y - cave.height * 1.3, 90, 50);
+
+  // 5. Deep Shadow Crevices (Carves the highlights into shapes)
+  fill(45, 35, 30, 200);
+  ellipse(cx - cave.width * 0.55, floorPos_y - cave.height * 0.5, 40, 80);
+  ellipse(cx + cave.width * 0.6, floorPos_y - cave.height * 0.55, 50, 70);
+  ellipse(cx, floorPos_y - cave.height * 1.15, 80, 30);
+  ellipse(cx - cave.width * 0.35, floorPos_y - cave.height * 1.0, 50, 40);
+
+  // 6. Lush Overgrown Moss and Vines
+  // Thick glowing moss clusters on top
+  fill(50, 120, 60);
+  ellipse(cx - cave.width * 0.3, floorPos_y - cave.height * 1.35, 60, 40);
+  ellipse(cx, floorPos_y - cave.height * 1.48, 80, 30);
+  ellipse(cx + cave.width * 0.3, floorPos_y - cave.height * 1.25, 70, 45);
+  ellipse(cx + cave.width * 0.6, floorPos_y - cave.height * 0.9, 50, 60);
+
+  // Bright moss highlights
+  fill(80, 160, 80);
+  ellipse(cx - cave.width * 0.32, floorPos_y - cave.height * 1.38, 40, 20);
+  ellipse(cx - 5, floorPos_y - cave.height * 1.5, 50, 15);
+  ellipse(cx + cave.width * 0.28, floorPos_y - cave.height * 1.28, 45, 25);
+
+  // Long dripping vines
+  stroke(40, 100, 50);
+  strokeWeight(3);
+  noFill();
+  beginShape();
+  curveVertex(cx - cave.width * 0.5, floorPos_y - cave.height * 0.9);
+  curveVertex(cx - cave.width * 0.5, floorPos_y - cave.height * 0.9);
+  curveVertex(cx - cave.width * 0.45, floorPos_y - cave.height * 0.5);
+  curveVertex(cx - cave.width * 0.5, floorPos_y - cave.height * 0.2);
+  curveVertex(cx - cave.width * 0.5, floorPos_y - cave.height * 0.2);
+  endShape();
+
+  beginShape();
+  curveVertex(cx + cave.width * 0.45, floorPos_y - cave.height * 1.0);
+  curveVertex(cx + cave.width * 0.45, floorPos_y - cave.height * 1.0);
+  curveVertex(cx + cave.width * 0.4, floorPos_y - cave.height * 0.6);
+  curveVertex(cx + cave.width * 0.48, floorPos_y - cave.height * 0.3);
+  curveVertex(cx + cave.width * 0.48, floorPos_y - cave.height * 0.3);
+  endShape();
+
+  beginShape();
+  curveVertex(cx + 20, floorPos_y - cave.height * 1.2);
+  curveVertex(cx + 20, floorPos_y - cave.height * 1.2);
+  curveVertex(cx + 25, floorPos_y - cave.height * 0.7);
+  curveVertex(cx + 15, floorPos_y - cave.height * 0.4);
+  curveVertex(cx + 15, floorPos_y - cave.height * 0.4);
+  endShape();
+  noStroke();
+
+  // 7. Ground scattered rocks around the entrance
+  fill(65, 55, 45);
+  ellipse(cx - cave.width * 0.7, floorPos_y + 5, 40, 15);
+  ellipse(cx - cave.width * 0.55, floorPos_y + 8, 25, 10);
+  ellipse(cx + cave.width * 0.65, floorPos_y + 6, 45, 18);
+  ellipse(cx + cave.width * 0.85, floorPos_y + 2, 30, 12);
+
+  fill(85, 75, 65);
+  ellipse(cx - cave.width * 0.72, floorPos_y + 3, 20, 8);
+  ellipse(cx + cave.width * 0.62, floorPos_y + 4, 25, 10);
 
   // Hibernating bear inside cave
   if (isHibernating) {
-    let fy = floorPos_y - 6;
+    let fy = floorPos_y - 12;
+    let breath = sin(frameCount * 0.05) * 3; // Breathing animation
+
+    // --- Small Campfire ---
+    let fireX = cx - 70;
+    let fireY = floorPos_y;
+
+    // Logs
+    fill(90, 60, 40);
     push();
-    fill(furColor);
-    rect(cx - 36, fy - 18, 72, 40, 12);
-    ellipse(cx - 14, fy + 6, 12, 10);
-    ellipse(cx + 14, fy + 6, 12, 10);
-    rect(cx - 44, fy - 20, 10, 28, 6);
-    rect(cx + 34, fy - 20, 10, 28, 6);
-    fill(skinColor);
-    ellipse(cx + 34, fy - 12, 34, 34);
-    fill(furColor);
-    ellipse(cx + 34, fy - 12, 48, 48);
-    fill(skinColor);
-    ellipse(cx + 34, fy - 12, 30, 30);
-    fill(0);
-    ellipse(cx + 28, fy - 14, 4, 4);
-    ellipse(cx + 40, fy - 14, 4, 4);
-    fill(0);
-    textSize(18);
-    text("Zzz", cx + 48, fy - 26);
+    translate(fireX, fireY);
+    rotate(PI / 6);
+    rect(-15, -4, 30, 8, 3);
+    rotate(-PI / 3);
+    rect(-15, -4, 30, 8, 3);
     pop();
+
+    // Fire Glow
+    let glowSize = 40 + sin(frameCount * 0.2) * 5;
+    fill(255, 100, 0, 40);
+    ellipse(fireX, fireY - 10, glowSize, glowSize);
+
+    // Flames
+    let f1 = sin(frameCount * 0.3) * 3;
+    let f2 = cos(frameCount * 0.4) * 4;
+    let f3 = sin(frameCount * 0.5) * 2;
+
+    noStroke();
+    // Outer flame (Orange)
+    fill(240, 100, 0, 200);
+    beginShape();
+    vertex(fireX - 12, fireY);
+    bezierVertex(
+      fireX - 10,
+      fireY - 15 - f1,
+      fireX - 5,
+      fireY - 20 - f2,
+      fireX,
+      fireY - 30 - f1,
+    );
+    bezierVertex(
+      fireX + 5,
+      fireY - 20 - f3,
+      fireX + 10,
+      fireY - 15 - f2,
+      fireX + 12,
+      fireY,
+    );
+    endShape(CLOSE);
+
+    // Inner flame (Yellow)
+    fill(255, 220, 0, 220);
+    beginShape();
+    vertex(fireX - 6, fireY);
+    bezierVertex(
+      fireX - 4,
+      fireY - 10 - f3,
+      fireX - 2,
+      fireY - 15 - f1,
+      fireX,
+      fireY - 20 - f2,
+    );
+    bezierVertex(
+      fireX + 2,
+      fireY - 15 - f1,
+      fireX + 4,
+      fireY - 10 - f2,
+      fireX + 6,
+      fireY,
+    );
+    endShape(CLOSE);
+
+    // --- Sleeping Bear ---
+    // Sleeping bear body (curled up)
+    fill(furColor);
+    // Main body that expands/contracts with breath
+    ellipse(cx - 10, fy, 80 + breath, 50 + breath);
+
+    // Hind leg tucked in
+    ellipse(cx - 35, fy + 12, 30, 20);
+    fill(45, 35, 25); // paw pad color
+    ellipse(cx - 42, fy + 16, 12, 16);
+
+    // Head
+    let headX = cx + 25;
+    let headY = fy + 5 - breath * 0.2;
+
+    // Ears
+    fill(furColor);
+    ellipse(headX - 12, headY - 18, 16, 16);
+    ellipse(headX + 12, headY - 18, 16, 16);
+    fill(skinColor);
+    ellipse(headX - 12, headY - 18, 8, 8);
+    ellipse(headX + 12, headY - 18, 8, 8);
+
+    // Main Head
+    fill(furColor);
+    ellipse(headX, headY, 46, 42); // Slightly squished head
+
+    // Snout
+    fill(skinColor);
+    ellipse(headX + 10, headY + 6, 24, 20); // Snout facing right
+
+    // Nose
+    fill(20, 15, 10);
+    ellipse(headX + 18, headY + 2, 8, 6);
+
+    // Closed Sleeping Eyes
+    stroke(20, 15, 10);
+    strokeWeight(2);
+    noFill();
+    arc(headX - 2, headY - 4, 10, 6, PI, 0); // Left eye closed
+    arc(headX + 12, headY - 4, 8, 5, PI, 0); // Right eye closed
+    noStroke();
+
+    // Front paw resting near face
+    fill(furColor);
+    ellipse(headX + 15, headY + 18, 25, 15);
+    fill(45, 35, 25); // paw pad
+    ellipse(headX + 22, headY + 20, 12, 10);
+
+    // --- Snore Bubble ---
+    let bubbleScale = 0.5 + Math.max(0, sin(frameCount * 0.05)) * 0.5;
+
+    fill(255, 255, 255, 150);
+    ellipse(headX + 28, headY + 4, 15 * bubbleScale, 15 * bubbleScale);
+
+    // --- Zzz Animation ---
+    let zOffset1 = (frameCount * 0.5) % 60;
+    let zOffset2 = (frameCount * 0.5 + 20) % 60;
+    let zOffset3 = (frameCount * 0.5 + 40) % 60;
+
+    let zStartX = headX + 15;
+    let zStartY = headY - 25;
+
+    fill(255, Math.max(0, 255 - zOffset1 * 4.2));
+    textSize(14);
+    text("z", zStartX + 10 + sin(frameCount * 0.05) * 5, zStartY - zOffset1);
+
+    fill(255, Math.max(0, 255 - zOffset2 * 4.2));
+    textSize(18);
+    text(
+      "Z",
+      zStartX + 20 + sin((frameCount + 20) * 0.05) * 5,
+      zStartY - zOffset2,
+    );
+
+    fill(255, Math.max(0, 255 - zOffset3 * 4.2));
+    textSize(22);
+    text(
+      "Z",
+      zStartX + 30 + sin((frameCount + 40) * 0.05) * 5,
+      zStartY - zOffset3,
+    );
   }
+
+  pop();
 }
 
 function drawCollectable(t) {
@@ -1896,129 +2742,226 @@ function drawGameCharBody() {
   if (invincibilityTimer % 10 > 5) return;
 
   push();
-  translate(gameChar_x, gameChar_y);
-  scale(charScaleX, charScaleY);
-  translate(-gameChar_x, -gameChar_y);
 
-  function head(xo, d) {
+  // Calculate dynamic walk cycle
+  let isMoving = isLeft || isRight;
+  let walkCycle =
+    isMoving && !isFalling && !isPlummeting ? sin(frameCount * 0.3) : 0;
+  let bodyBounce =
+    isMoving && !isFalling && !isPlummeting ? abs(walkCycle) * 3 : 0;
+
+  translate(gameChar_x, gameChar_y - bodyBounce); // Apply body bounce here
+  scale(charScaleX, charScaleY);
+  translate(-gameChar_x, -(gameChar_y - bodyBounce));
+
+  function head(xo, d, isSurprised = false, isLookingUp = false) {
+    let hy = gameChar_y - bodyBounce - 65;
+    let hx = gameChar_x + xo;
+
+    // Ears
     fill(furColor);
-    ellipse(gameChar_x + xo, gameChar_y - 65, 40, 45);
+    ellipse(hx - 12, hy - 18, 16, 16);
+    ellipse(hx + 12, hy - 18, 16, 16);
+    // Inner ear
     fill(skinColor);
-    ellipse(gameChar_x + xo + d * 4, gameChar_y - 65, 24, 28);
-    fill(0);
-    ellipse(gameChar_x + xo + d * 4 - 6, gameChar_y - 67, 4, 4);
-    ellipse(gameChar_x + xo + d * 4 + 6, gameChar_y - 67, 4, 4);
+    ellipse(hx - 12, hy - 18, 8, 8);
+    ellipse(hx + 12, hy - 18, 8, 8);
+
+    // Main Head
+    fill(furColor);
+    ellipse(hx, hy, 42, 46);
+
+    let faceDist = d * 6; // How far the face turns
+    let faceYOffset = isLookingUp ? -4 : 0;
+
+    // Snout
+    fill(skinColor);
+    ellipse(hx + faceDist, hy + 6 + faceYOffset, 24, 20);
+
+    // Nose
+    fill(20, 15, 10);
+    ellipse(hx + faceDist + d * 2, hy + 2 + faceYOffset, 8, 6);
+
+    // Eyes
+    fill(20, 15, 10);
+    ellipse(hx + faceDist - 6, hy - 6 + faceYOffset, 6, 8);
+    ellipse(hx + faceDist + 6, hy - 6 + faceYOffset, 6, 8);
+
+    // Eye highlights
+    fill(255);
+    ellipse(hx + faceDist - 7, hy - 8 + faceYOffset, 2, 2);
+    ellipse(hx + faceDist + 5, hy - 8 + faceYOffset, 2, 2);
+
+    // Mouth
+    if (isSurprised) {
+      fill(50, 20, 20);
+      ellipse(hx + faceDist, hy + 10 + faceYOffset, 6, 8); // Surprised O
+    } else {
+      stroke(20, 15, 10);
+      strokeWeight(1.5);
+      noFill();
+      beginShape();
+      vertex(hx + faceDist - 3, hy + 10 + faceYOffset);
+      bezierVertex(
+        hx + faceDist - 1,
+        hy + 12 + faceYOffset,
+        hx + faceDist + 1,
+        hy + 12 + faceYOffset,
+        hx + faceDist + 3,
+        hy + 10 + faceYOffset,
+      );
+      endShape();
+      noStroke();
+    }
   }
 
   noStroke();
 
-  // --- Pose: Moving left while falling ---
+  // Helper function for drawing swinging limbs
+  function drawLimb(xOffset, yOffset, w, h, rotationAngle, cornerRadius = 8) {
+    push();
+    translate(gameChar_x + xOffset, gameChar_y - bodyBounce + yOffset);
+    rotate(rotationAngle);
+    fill(45, 35, 25); // Dark brown/black paws
+    rect(-w / 2, 0, w, h, cornerRadius);
+    pop();
+  }
+
+  // --- Pose: Moving left while Jumping or Falling ---
   if (isLeft && isFalling) {
-    fill(furColor);
-    rect(gameChar_x - 18, gameChar_y - 60, 36, 45, 10);
-    head(0, -1);
-    push();
-    translate(gameChar_x - 15, gameChar_y - 50);
-    rotate(-2.5);
-    rect(0, 0, 12, 35, 6);
-    pop();
-    push();
-    translate(gameChar_x + 10, gameChar_y - 50);
-    rotate(0.5);
-    rect(0, 0, 12, 35, 6);
-    pop();
-    rect(gameChar_x - 15, gameChar_y - 25, 14, 14, 7);
-    rect(gameChar_x + 2, gameChar_y - 20, 14, 14, 7);
+    let isJumpingUp = velocity_y < -2;
 
-    // --- Pose: Moving right while falling ---
+    // Back Arm
+    drawLimb(-15, -50, 14, 35, isJumpingUp ? 2.5 : -2.5);
+    // Back Leg
+    drawLimb(-5, -25, 14, 25, isJumpingUp ? -1.0 : 0.5);
+
+    // Body
+    fill(furColor);
+    rect(gameChar_x - 18, gameChar_y - bodyBounce - 60, 36, 45, 15);
+    fill(skinColor); // Belly
+    ellipse(gameChar_x - 4, gameChar_y - bodyBounce - 35, 24, 30);
+
+    head(-2, -1, !isJumpingUp, isJumpingUp);
+
+    // Front Arm
+    drawLimb(10, -50, 14, 35, isJumpingUp ? -2.0 : 0.5);
+    // Front Leg
+    drawLimb(5, -20, 14, 25, isJumpingUp ? 0.5 : -0.5);
+
+    // --- Pose: Moving right while Jumping or Falling ---
   } else if (isRight && isFalling) {
-    fill(furColor);
-    rect(gameChar_x - 18, gameChar_y - 60, 36, 45, 10);
-    head(0, 1);
-    push();
-    translate(gameChar_x + 15, gameChar_y - 50);
-    rotate(2.5);
-    rect(-12, 0, 12, 35, 6);
-    pop();
-    push();
-    translate(gameChar_x - 10, gameChar_y - 50);
-    rotate(-0.5);
-    rect(-12, 0, 12, 35, 6);
-    pop();
-    rect(gameChar_x - 15, gameChar_y - 20, 14, 14, 7);
-    rect(gameChar_x + 2, gameChar_y - 25, 14, 14, 7);
+    let isJumpingUp = velocity_y < -2;
 
-    // --- Pose: Moving left on ground ---
+    // Back Arm
+    drawLimb(15, -50, 14, 35, isJumpingUp ? -2.5 : 2.5);
+    // Back Leg
+    drawLimb(5, -25, 14, 25, isJumpingUp ? 1.0 : -0.5);
+
+    // Body
+    fill(furColor);
+    rect(gameChar_x - 18, gameChar_y - bodyBounce - 60, 36, 45, 15);
+    fill(skinColor); // Belly
+    ellipse(gameChar_x + 4, gameChar_y - bodyBounce - 35, 24, 30);
+
+    head(2, 1, !isJumpingUp, isJumpingUp);
+
+    // Front Arm
+    drawLimb(-10, -50, 14, 35, isJumpingUp ? 2.0 : -0.5);
+    // Front Leg
+    drawLimb(-5, -20, 14, 25, isJumpingUp ? -0.5 : 0.5);
+
+    // --- Pose: Moving left on ground (Animated) ---
   } else if (isLeft) {
+    // Back Arm (swings opposite)
+    drawLimb(5, -50, 14, 36, -walkCycle * 0.8 + 0.2);
+    // Back Leg
+    drawLimb(5, -20, 14, 22, walkCycle * 0.6);
+
+    // Body
+    push();
+    translate(gameChar_x, gameChar_y - bodyBounce);
+    rotate(-0.08);
     fill(furColor);
-    push();
-    translate(gameChar_x + 5, gameChar_y - 20);
-    rotate(0.4);
-    rect(-6, 0, 12, 25, 6);
+    rect(-18, -60, 36, 45, 15);
+    fill(skinColor); // Belly
+    ellipse(-4, -35, 24, 30);
     pop();
-    push();
-    translate(gameChar_x, gameChar_y);
-    rotate(-0.1);
-    rect(-18, -60, 36, 45, 10);
-    pop();
+
     head(-4, -1);
-    push();
-    translate(gameChar_x - 5, gameChar_y - 20);
-    rotate(-0.4);
-    rect(-6, 0, 12, 25, 6);
-    pop();
-    push();
-    translate(gameChar_x, gameChar_y - 50);
-    rotate(0.5);
-    rect(-6, 0, 12, 40, 6);
-    pop();
 
-    // --- Pose: Moving right on ground ---
+    // Front Leg
+    drawLimb(-5, -20, 14, 22, -walkCycle * 0.6);
+    // Front Arm
+    drawLimb(-5, -50, 14, 36, walkCycle * 0.8 + 0.2);
+
+    // --- Pose: Moving right on ground (Animated) ---
   } else if (isRight) {
+    // Back Arm
+    drawLimb(-5, -50, 14, 36, walkCycle * 0.8 - 0.2);
+    // Back Leg
+    drawLimb(-5, -20, 14, 22, -walkCycle * 0.6);
+
+    // Body
+    push();
+    translate(gameChar_x, gameChar_y - bodyBounce);
+    rotate(0.08);
     fill(furColor);
-    push();
-    translate(gameChar_x - 5, gameChar_y - 20);
-    rotate(-0.4);
-    rect(-6, 0, 12, 25, 6);
-    pop();
-    push();
-    translate(gameChar_x, gameChar_y);
-    rotate(0.1);
-    rect(-18, -60, 36, 45, 10);
-    pop();
-    head(4, 1);
-    push();
-    translate(gameChar_x + 5, gameChar_y - 20);
-    rotate(0.4);
-    rect(-6, 0, 12, 25, 6);
-    pop();
-    push();
-    translate(gameChar_x, gameChar_y - 50);
-    rotate(-0.5);
-    rect(-6, 0, 12, 40, 6);
+    rect(-18, -60, 36, 45, 15);
+    fill(skinColor); // Belly
+    ellipse(4, -35, 24, 30);
     pop();
 
-    // --- Pose: Falling / Plummeting ---
+    head(4, 1);
+
+    // Front Leg
+    drawLimb(5, -20, 14, 22, walkCycle * 0.6);
+    // Front Arm
+    drawLimb(5, -50, 14, 36, -walkCycle * 0.8 - 0.2);
+
+    // --- Pose: Jumping / Falling / Plummeting (Neutral Direct) ---
   } else if (isFalling || isPlummeting) {
+    let isJumpingUp = velocity_y < -2 && !isPlummeting;
+
+    // Back Arms
+    drawLimb(-25, -55, 14, 35, isJumpingUp ? 2.5 : 2.8); // Left Arm up
+    drawLimb(25, -55, 14, 35, isJumpingUp ? -2.5 : -2.8); // Right Arm up
+
+    // Body
     fill(furColor);
-    rect(gameChar_x - 18, gameChar_y - 60, 36, 45, 10);
-    head(0, 0);
-    fill(0);
-    ellipse(gameChar_x, gameChar_y - 58, 8, 10);
-    rect(gameChar_x - 30, gameChar_y - 65, 12, 40, 6);
-    rect(gameChar_x + 18, gameChar_y - 65, 12, 40, 6);
-    rect(gameChar_x - 15, gameChar_y - 20, 12, 15, 6);
-    rect(gameChar_x + 3, gameChar_y - 20, 12, 15, 6);
+    rect(gameChar_x - 20, gameChar_y - bodyBounce - 60, 40, 48, 16);
+    fill(skinColor); // Belly
+    ellipse(gameChar_x, gameChar_y - bodyBounce - 35, 28, 34);
+
+    head(0, 0, !isJumpingUp, isJumpingUp);
+
+    // spread legs
+    drawLimb(-12, -20, 14, 22, isJumpingUp ? -0.2 : 0.4); // Left Leg
+    drawLimb(12, -20, 14, 22, isJumpingUp ? 0.2 : -0.4); // Right Leg
 
     // --- Pose: Standing idle ---
   } else {
+    // Breathing scale
+    let breath = sin(frameCount * 0.05) * 1.5;
+
+    // Back Arms (hanging down)
+    drawLimb(-22, -50, 14, 38, 0.1); // Left Arm
+    drawLimb(22, -50, 14, 38, -0.1); // Right Arm
+
+    // Body
+    push();
+    translate(gameChar_x, gameChar_y);
     fill(furColor);
-    rect(gameChar_x - 20, gameChar_y - 60, 40, 50, 12);
-    head(0, 0);
-    rect(gameChar_x - 32, gameChar_y - 55, 14, 45, 7);
-    rect(gameChar_x + 18, gameChar_y - 55, 14, 45, 7);
-    rect(gameChar_x - 15, gameChar_y - 12, 14, 15, 6);
-    rect(gameChar_x + 1, gameChar_y - 12, 14, 15, 6);
+    rect(-20, -60 - breath, 40, 50 + breath, 16);
+    fill(skinColor); // Belly
+    ellipse(0, -35 - breath / 2, 28, 34 + breath / 2);
+    pop();
+
+    head(0, 0); // Idle head
+
+    // Legs
+    drawLimb(-10, -12, 14, 15, 0); // Left Leg
+    drawLimb(10, -12, 14, 15, 0); // Right Leg
   }
 
   pop();
@@ -2078,7 +3021,7 @@ function renderFlagpole() {
   }
 
   fill(255, 50, 50);
-  rect(flagpole.x_pos, floorPos_y - 50 - flagpole.height, 60, 40);
+  rect(flagpole.x_pos - 60, floorPos_y - 50 - flagpole.height, 60, 40);
   pop();
 }
 
@@ -2136,44 +3079,95 @@ function drawStarShape(x, y, r1, r2, filled) {
   endShape(CLOSE);
 }
 
+function drawPixelHeart(x, y, sz) {
+  push();
+  translate(x, y);
+  scale(sz);
+  noStroke();
+
+  let grid = [
+    "011000110",
+    "111101111",
+    "111111111",
+    "111111111",
+    "011111110",
+    "001111100",
+    "000111000",
+    "000010000",
+  ];
+
+  let w = grid[0].length;
+  let h = grid.length;
+  translate(-w / 2, -h / 2);
+
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      if (grid[r][c] === "1") {
+        if (r === 1 && c === 2)
+          fill(255, 150, 150); // slight highlight
+        else fill(255, 50, 50);
+        rect(c, r, 1.1, 1.1); // 1.1 to avoid faint anti-aliasing seams
+      }
+    }
+  }
+  pop();
+}
+
 function drawHUD() {
   drawQuestCompass();
 
-  // Progress bar
-  let barW = 200;
-  let barH = 10;
+  // Progress to Home
+  let barW = 300;
   let barX = width / 2 - barW / 2;
-  let barY = 30;
-  noStroke();
-  fill(0, 100);
-  rect(barX, barY, barW, barH, 5);
+  let barY = 35;
+
+  // Track line
+  stroke(255, 100);
+  strokeWeight(4);
+  drawingContext.setLineDash([8, 8]);
+  line(barX, barY, barX + barW, barY);
+  drawingContext.setLineDash([]);
+
+  // Progress position
   let progress = map(gameChar_x, 100, flagpole.x_pos, 0, barW, true);
-  fill(255, 215, 0);
-  rect(barX, barY, progress, barH, 5);
+
+  // Tiny flag at end
+  noStroke();
+  fill(150);
+  rect(barX + barW, barY - 15, 3, 18);
+  fill(255, 50, 50);
+  triangle(
+    barX + barW,
+    barY - 15,
+    barX + barW - 12,
+    barY - 10,
+    barX + barW,
+    barY - 5,
+  );
+
+  // Bear head indicator
+  push();
+  translate(barX + progress, barY);
+  scale(0.4);
+  fill(furColor);
+  ellipse(0, 0, 40, 45);
+  fill(skinColor);
+  ellipse(0, 0, 24, 28);
+  fill(0);
+  ellipse(-6, -2, 4, 4);
+  ellipse(6, -2, 4, 4);
+  pop();
+
+  noStroke();
   fill(255);
   textSize(10);
   textAlign(CENTER, BOTTOM);
-  text("PROGRESS TO HOME", width / 2, barY - 5);
+  text("JOURNEY HOME", width / 2, barY - 25);
 
-  // Lives — heart shapes
+  // Lives — pixel heart shapes
   for (let i = 0; i < lives; i++) {
     let s = i === lives - 1 && lives === 1 ? 1 + sin(heartPulse) * 0.2 : 1;
-    push();
-    translate(30 + i * 40, 40);
-    scale(s);
-    noStroke();
-    fill(255, 50, 50);
-    beginShape();
-    vertex(0, 5);
-    bezierVertex(-2, 2, -10, -6, -10, -2);
-    bezierVertex(-10, -9, -2, -13, 0, -7);
-    bezierVertex(2, -13, 10, -9, 10, -2);
-    bezierVertex(10, -6, 2, 2, 0, 5);
-    endShape(CLOSE);
-    // Highlight
-    fill(255, 120, 120, 160);
-    ellipse(-3, -6, 5, 4);
-    pop();
+    drawPixelHeart(30 + i * 35, 40, s * 3);
   }
 
   fill(255, 215, 0);
@@ -2574,6 +3568,7 @@ function keyPressed() {
 
   if (gameState === STATE_GAMEOVER) {
     if (keyCode === 32) {
+      console.log("Space pressed in Game Over");
       level = 1;
       lives = 3;
       gameState = STATE_PLAYING;
@@ -2614,13 +3609,6 @@ function keyPressed() {
       return false;
     }
 
-    if (lives < 1 && keyCode == 32) {
-      level = 1;
-      lives = 3;
-      setup();
-      return false;
-    }
-
     // Jump buffering: store jump intent even if not on ground yet
     if (keyCode == 32 && !isHibernating) {
       jumpBufferTimer = JUMP_BUFFER_LIMIT;
@@ -2647,10 +3635,14 @@ function keyPressed() {
       startGame();
       return false;
     }
-    if (gameChar_y > height && keyCode == 32) {
+    if (gameChar_y > height && keyCode === 32) {
       lives--;
       sounds.play("death");
-      if (lives > 0) respawnCharacter();
+      if (lives > 0) {
+        respawnCharacter();
+      } else {
+        gameState = STATE_GAMEOVER;
+      }
       return false;
     }
 
@@ -2752,13 +3744,17 @@ function mousePressed() {
   }
 
   if (gameState === STATE_GAMEOVER) {
-    let btnY = cy + 24;
+    let btnBW = 210;
+    let btnBH = 55;
+    let btnBX = cx - btnBW / 2;
+    let btnY = cy + 30;
     if (
-      mouseX >= bx &&
-      mouseX <= bx + bw &&
+      mouseX >= btnBX &&
+      mouseX <= btnBX + btnBW &&
       mouseY >= btnY &&
-      mouseY <= btnY + bh
+      mouseY <= btnY + btnBH
     ) {
+      console.log("Button clicked in Game Over");
       level = 1;
       lives = 3;
       gameState = STATE_PLAYING;
