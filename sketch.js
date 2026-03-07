@@ -215,6 +215,12 @@ var charScaleX = 1;
 var charScaleY = 1;
 var invincibilityTimer = 0;
 var heartPulse = 0;
+var heatLevel = 0;
+const MAX_HEAT = 100;
+
+// Spring Mechanics
+var seedsCount = 0;
+var bridges = [];
 
 // Physics Constants
 var velocity_y = 0;
@@ -226,15 +232,41 @@ function createPlatforms(x, y, length) {
     var p = {
         x: x, 
         y: y, 
+        baseLength: length,
         length: length,
+        bloom: 0,
         draw: function() {
+            let s = seasons[currentSeasonIndex] || seasons[0];
+            
+            // Spring Growth Logic
+            if (s.name === "Spring" && this.checkContact(gameChar_x, gameChar_y)) {
+                this.length = lerp(this.length, this.baseLength * 1.3, 0.1);
+                this.bloom = lerp(this.bloom, 1, 0.1);
+            } else {
+                this.length = lerp(this.length, this.baseLength, 0.1);
+                this.bloom = lerp(this.bloom, 0, 0.1);
+            }
+
             fill(120, 100, 80);
-            rect(this.x, this.y, this.length, 20, 5);
+            rect(this.x - (this.length - this.baseLength)/2, this.y, this.length, 20, 5);
             fill(255, 50); 
-            rect(this.x, this.y, this.length, 5, 5);
+            rect(this.x - (this.length - this.baseLength)/2, this.y, this.length, 5, 5);
+
+            // Draw Flowers in Spring
+            if (s.name === "Spring" && this.bloom > 0.1) {
+                for (let i = 0; i < 3; i++) {
+                    let fx = this.x + (i + 1) * (this.baseLength / 4);
+                    let fy = this.y - 5 * this.bloom;
+                    fill(255, 100, 200, 255 * this.bloom);
+                    ellipse(fx, fy, 8 * this.bloom, 8 * this.bloom);
+                    fill(255, 255, 0, 255 * this.bloom);
+                    ellipse(fx, fy, 3 * this.bloom, 3 * this.bloom);
+                }
+            }
         },
         checkContact: function(gc_x, gc_y) {
-            if (gc_x > this.x && gc_x < this.x + this.length) {
+            let currentX = this.x - (this.length - this.baseLength)/2;
+            if (gc_x > currentX && gc_x < currentX + this.length) {
                 var d = this.y - gc_y;
                 if (d >= 0 && d < 5) {
                     return true;
@@ -377,6 +409,7 @@ function setup() {
 function startGame() {
     gameChar_x = 100; gameChar_y = floorPos_y; velocity_y = 0; cameraPosX = 0; tutorialAlpha = 255; game_score = 0; flagpole = { isReached: false, x_pos: 4500, height: 0 };
     isLeft = false; isRight = false; isFalling = false; isPlummeting = false; isHibernating = false; invincibilityTimer = 0; coyoteTimer = 0;
+    heatLevel = 0;
     lastCheckpoint = { x: 100, y: floorPos_y };
     generateCanyons(); generateCave(); initializeSeasons(); generateTrees(); generateMountains(); generateClouds(); generateStoryObjects();
     generateCheckpoints();
@@ -500,13 +533,20 @@ function generateCave() {
 
 function generateCollectables() {
     collectables = [];
-    collectables.push({ x_pos: 875, y_pos: floorPos_y - 330, isFound: false });
+    collectables.push({ x_pos: 875, y_pos: floorPos_y - 330, isFound: false, type: 'cone' });
     for (let i = 0; i < 5; i++) {
         let cx = random(200, 4000), valid = true;
         for (let c of canyons) if (cx > c.x_pos - 20 && cx < c.x_pos + c.width + 20) { valid = false; break; }
-        if (valid) collectables.push({ x_pos: cx, y_pos: floorPos_y - 20, isFound: false }); else i--;
+        if (valid) collectables.push({ x_pos: cx, y_pos: floorPos_y - 20, isFound: false, type: 'cone' }); else i--;
     }
-    if (cave) collectables.push({ x_pos: cave.x_pos + cave.width/2, y_pos: floorPos_y - 20, isFound: false });
+    
+    // Add Seeds
+    for (let i = 0; i < 3; i++) {
+        let sx = random(200, 4000);
+        collectables.push({ x_pos: sx, y_pos: floorPos_y - 20, isFound: false, type: 'seed' });
+    }
+
+    if (cave) collectables.push({ x_pos: cave.x_pos + cave.width/2, y_pos: floorPos_y - 20, isFound: false, type: 'cone' });
 }
 
 function initializeSeasons() {
@@ -600,7 +640,20 @@ function drawCanyon(c) { fill(40, 20, 10); rect(c.x_pos, floorPos_y, c.width, OR
 
 function drawCollectable(t) {
     if (t.isFound) return;
-    let bob = sin(frameCount * 0.1) * 8, rotX = cos(frameCount * 0.05); push(); translate(t.x_pos, t.y_pos + bob); scale(rotX, 1); noStroke(); fill(101, 67, 33); beginShape(); vertex(0, -25); bezierVertex(-15, -15, -20, 5, 0, 15); bezierVertex(20, 5, 15, -15, 0, -25); endShape(CLOSE); fill(255, 215, 0); for (let r = 0; r < 4; r++) { let y = -15 + r * 8, count = 3 - abs(r - 2); for (let i = 0; i <= count; i++) { let x = -10 + i * 7 + (r % 2 === 0 ? 3 : 0); fill(255, 223, 0); ellipse(x, y, 8, 10); fill(184, 134, 11, 150); arc(x, y, 8, 10, 0, PI); } } fill(255, 180); ellipse(-5, -15, 6, 10); pop();
+    let s = seasons[currentSeasonIndex] || seasons[0];
+    if (t.type === 'seed' && s.name !== "Spring") return;
+
+    let bob = sin(frameCount * 0.1) * 8, rotX = cos(frameCount * 0.05); push(); translate(t.x_pos, t.y_pos + bob); scale(rotX, 1); noStroke();
+    
+    if (t.type === 'seed') {
+        fill(100, 200, 100);
+        ellipse(0, -10, 12, 18);
+        fill(255, 255, 200, 150);
+        ellipse(-3, -12, 5, 8);
+    } else {
+        fill(101, 67, 33); beginShape(); vertex(0, -25); bezierVertex(-15, -15, -20, 5, 0, 15); bezierVertex(20, 5, 15, -15, 0, -25); endShape(CLOSE); fill(255, 215, 0); for (let r = 0; r < 4; r++) { let y = -15 + r * 8, count = 3 - abs(r - 2); for (let i = 0; i <= count; i++) { let x = -10 + i * 7 + (r % 2 === 0 ? 3 : 0); fill(255, 223, 0); ellipse(x, y, 8, 10); fill(184, 134, 11, 150); arc(x, y, 8, 10, 0, PI); } } fill(255, 180); ellipse(-5, -15, 6, 10);
+    }
+    pop();
 }
 
 function drawStoryObjects() {
@@ -635,6 +688,8 @@ function updateGame() {
     updateDayNightCycle(); 
     updateSeasonCycle(); 
     updateHibernationLogic(); 
+    updateHeatLogic();
+    updateBridges();
     playSeasonalAmbience(); 
     playProceduralMusic();
     
@@ -684,10 +739,14 @@ function drawGame() {
     }
     
     for (var col of collectables) { 
+        let s = seasons[currentSeasonIndex] || seasons[0];
+        if (col.type === 'seed' && s.name !== "Spring") continue;
+
         drawCollectable(col); 
         if (!col.isFound && dist(gameChar_x, gameChar_y, col.x_pos, col.y_pos) < 50) { 
             col.isFound = true; 
-            game_score++; 
+            if (col.type === 'seed') seedsCount++;
+            else game_score++; 
             sounds.play('coin'); 
         } 
     }
@@ -695,18 +754,20 @@ function drawGame() {
     isContact = false;
     for (let p of platforms) {
         p.draw();
-        
-        // We evaluate checkContact at the CURRENT gameChar_y, AND ALSO pre-emptively
-        // if velocity_y is large, we check if the character will pass through the platform this frame!
-        // This solves the skipping problem, honoring the d < 5 logic internally.
         if (p.checkContact(gameChar_x, gameChar_y) || 
            (velocity_y > 0 && gameChar_y < p.y && gameChar_y + velocity_y >= p.y && gameChar_x > p.x && gameChar_x < p.x + p.length)) {
-            
             isContact = true;
-            // Snapping gameChar_y immediately so it is exactly on top, making d = 0 (which satisfies < 5)
-            if (velocity_y > 0) {
-                gameChar_y = p.y;
-                velocity_y = 0;
+            if (velocity_y > 0) { gameChar_y = p.y; velocity_y = 0; }
+        }
+    }
+
+    for (let b of bridges) {
+        drawBridge(b);
+        if (gameChar_x > b.x && gameChar_x < b.x + b.w) {
+            let d = floorPos_y - gameChar_y;
+            if (d >= 0 && d < 5) {
+                isContact = true;
+                if (velocity_y > 0) { gameChar_y = floorPos_y; velocity_y = 0; }
             }
         }
     }
@@ -960,7 +1021,19 @@ function drawCave() {
 }
 
 function processCharacter() {
-    if (!isHibernating && !isPlummeting) { isLeft = keyIsDown(LEFT_ARROW) || keyIsDown(65); isRight = keyIsDown(RIGHT_ARROW) || keyIsDown(68); if (isLeft) gameChar_x -= 5; if (isRight) gameChar_x += 5; }
+    if (!isHibernating && !isPlummeting) { 
+        isLeft = keyIsDown(LEFT_ARROW) || keyIsDown(65); 
+        isRight = keyIsDown(RIGHT_ARROW) || keyIsDown(68); 
+        if (isLeft) gameChar_x -= 5; 
+        if (isRight) gameChar_x += 5; 
+
+        // Seasonal Mechanics: Autumn Wind
+        let s = seasons[currentSeasonIndex] || seasons[0];
+        if (s.name === "Autumn") {
+            let windPower = seasonSpecs[currentSeasonIndex].weather.wind * 0.5;
+            gameChar_x += windPower; // Constant push to the right
+        }
+    }
     if (!isHibernating) { 
         // Move horizontally only if spacebar jumping
         gameChar_y += velocity_y; 
@@ -1122,6 +1195,7 @@ function keyPressed() {
             lives--; sounds.play('death'); if (lives > 0) respawnCharacter(); return false; 
         }
         if (key === 'W' || key === 'w') toggleHibernation();
+        if (key === 'B' || key === 'b') createBridge();
         if (keyCode == 32 && (coyoteTimer > 0) && !isPlummeting && !isHibernating) { 
             velocity_y = jumpPower; sounds.play('jump'); charScaleX = 0.8; charScaleY = 1.2; coyoteTimer = 0; 
         }
@@ -1172,6 +1246,91 @@ function updateWeather() {
 
 function drawFog() { let fog = seasonSpecs[currentSeasonIndex].fog; if (fog.alpha > 0) { noStroke(); fill(fog.color[0], fog.color[1], fog.color[2], fog.alpha); rect(0, 0, width, height); } }
 
+function updateBridges() {
+    for (let i = bridges.length - 1; i >= 0; i--) {
+        bridges[i].life -= 1;
+        if (bridges[i].life <= 0) bridges.splice(i, 1);
+    }
+}
+
+function drawBridge(b) {
+    push();
+    let alpha = map(b.life, 0, 100, 0, 255, true);
+    stroke(100, 200, 100, alpha);
+    strokeWeight(10);
+    line(b.x, floorPos_y, b.x + b.w, floorPos_y);
+    
+    // Some leafy details
+    noStroke();
+    fill(50, 150, 50, alpha);
+    for (let i = 0; i < 5; i++) {
+        ellipse(b.x + (i + 0.5) * (b.w / 5), floorPos_y, 15, 10);
+    }
+    pop();
+}
+
+function createBridge() {
+    if (seedsCount <= 0) return;
+    let s = seasons[currentSeasonIndex] || seasons[0];
+    if (s.name !== "Spring") return;
+
+    for (let c of canyons) {
+        if (gameChar_x > c.x_pos - 100 && gameChar_x < c.x_pos + c.width + 100) {
+            bridges.push({ x: c.x_pos, w: c.width, life: 600 }); // 10 seconds at 60fps
+            seedsCount--;
+            sounds.play('land');
+            return;
+        }
+    }
+}
+
+function updateHeatLogic() {
+    let s = seasons[currentSeasonIndex] || seasons[0];
+    if (s.name !== "Summer") {
+        heatLevel = max(0, heatLevel - 1); // Slowly cool down in other seasons
+        return;
+    }
+
+    let dayRatio = 1 - abs(timeOfDay - 720) / 720;
+    let isDay = dayRatio > 0.25;
+    let inShade = false;
+
+    // Check Tree Shade
+    for (let t of trees) {
+        let cx = t.x + t.trunkW / 2;
+        let sz = t.canopySize;
+        if (abs(gameChar_x - cx) < sz * 0.45) { // Under canopy
+            inShade = true;
+            break;
+        }
+    }
+
+    // Check Cloud Coolness
+    for (let c of clouds) {
+        for (let p of c.puffs) {
+            let bob = sin(frameCount * 0.02 + c.bobOffset) * 5;
+            let d = dist(gameChar_x, gameChar_y - 30, c.x + p.ox, c.y + p.oy + bob);
+            if (d < p.size) { // Contact with cloud
+                inShade = true;
+                break;
+            }
+        }
+    }
+
+    if (isDay && !inShade) {
+        heatLevel += 0.2; // Heat up in sun
+    } else {
+        heatLevel = max(0, heatLevel - 0.5); // Cool down in shade/night/clouds
+    }
+
+    if (heatLevel >= MAX_HEAT) {
+        lives--;
+        heatLevel = 0;
+        sounds.play('death');
+        if (lives > 0) respawnCharacter();
+    }
+}
+
 function drawHUD() {
     drawQuestCompass(); 
     
@@ -1181,6 +1340,24 @@ function drawHUD() {
     let progress = map(gameChar_x, 100, flagpole.x_pos, 0, barW, true);
     fill(255, 215, 0); rect(barX, barY, progress, barH, 5);
     fill(255); textSize(10); textAlign(CENTER, BOTTOM); text("PROGRESS TO HOME", width/2, barY - 5);
+
+    // Heat Meter (Summer Only)
+    let s = seasons[currentSeasonIndex] || seasons[0];
+    if (s.name === "Summer" || heatLevel > 0) {
+        let hW = 150, hH = 8, hX = width/2 - hW/2, hY = 60;
+        noStroke(); fill(0, 100); rect(hX, hY, hW, hH, 4);
+        let hColor = lerpColor(color(255, 200, 0), color(255, 0, 0), heatLevel / MAX_HEAT);
+        fill(hColor); rect(hX, hY, (heatLevel / MAX_HEAT) * hW, hH, 4);
+        fill(255); textSize(9); textAlign(CENTER, BOTTOM); text("HEAT LEVEL", width/2, hY - 2);
+    }
+
+    // Seeds Count (Spring Only)
+    if (s.name === "Spring" || seedsCount > 0) {
+        fill(100, 255, 100); stroke(0); strokeWeight(2); textSize(18); textAlign(LEFT, TOP); text("Seeds: " + seedsCount, 20, 100);
+        if (seedsCount > 0 && s.name === "Spring") {
+            noStroke(); fill(255, 200); textSize(12); text("Press B to build bridge", 20, 125);
+        }
+    }
 
     for (let i = 0; i < lives; i++) { 
         let s = (i === lives - 1 && lives === 1) ? 1 + sin(heartPulse)*0.2 : 1; 
