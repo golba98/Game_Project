@@ -1,3 +1,11 @@
+p5.disableFriendlyErrors = true; // For performance and startup speed
+
+window.onerror = function (msg, url, line, col, error) {
+  console.error("CRITICAL ERROR: " + msg + "\nAt: " + url + ":" + line + ":" + col);
+  alert("The game encountered an error and couldn't start. Check the console (F12) for details.");
+  return false;
+};
+
 // ============================================================
 // 1. CONSTANTS & GAME STATES
 // ============================================================
@@ -1013,17 +1021,36 @@ function OwlEnemy(x, y, range) {
 // ============================================================
 
 function preload() {
-  gameFont = loadFont("assets/font.ttf");
+  console.log("Game Preloading...");
+  try {
+    gameFont = loadFont("assets/font.ttf");
+  } catch (e) {
+    console.warn("Font failed to load, falling back to sans-serif.");
+  }
 }
 
 function setup() {
+  console.log("Game Setting up...");
   createCanvas(windowWidth, windowHeight);
-  textFont(gameFont);
+
+  // Remove loading indicator from index.html
+  const loadingDiv = document.getElementById("loading");
+  if (loadingDiv) loadingDiv.remove();
+
+  try {
+    if (gameFont) textFont(gameFont);
+    else textFont("sans-serif");
+  } catch (e) {
+    console.warn("Could not set font:", e.message);
+    textFont("sans-serif");
+  }
+
   floorPos_y = 450;
   furColor = color(70, 45, 20);
   skinColor = color(180, 140, 110);
   lives = 3;
   startGame();
+  console.log("Game Setup Complete.");
 }
 
 function startGame() {
@@ -1211,6 +1238,7 @@ function generateCanyons(config) {
   // THE LEAP OF FAITH: wide but clearable (Max jump is ~250px)
   canyons.push({ x_pos: 1800, width: 220 });
 
+  let attempts = 0;
   for (let i = 0; i < config.canyonCount; i++) {
     let cx = random(500, config.flagpoleX - 300);
     let cw = random(config.canyonMinWidth, config.canyonMaxWidth);
@@ -1225,14 +1253,20 @@ function generateCanyons(config) {
 
     if (valid) {
       canyons.push({ x_pos: cx, width: cw });
+      attempts = 0;
     } else {
-      i--;
+      attempts++;
+      if (attempts < 50) {
+        i--;
+      }
+      // else skip this canyon to avoid infinite loop
     }
   }
 }
 
 function generateCave() {
-  while (true) {
+  let attempts = 0;
+  while (attempts < 100) {
     let cx = random(-1500, 2500);
     let cw = random(220, 320);
     let ch = random(160, 220);
@@ -1247,15 +1281,19 @@ function generateCave() {
 
     if (valid) {
       cave = { x_pos: cx, width: cw, height: ch };
-      break;
+      return;
     }
+    attempts++;
   }
+  // Fallback: place cave at a safe default position
+  cave = { x_pos: -1200, width: 260, height: 180 };
 }
 
 function generateCollectables(config) {
   collectables = [];
   collectables.push({ x_pos: 875, y_pos: floorPos_y - 330, isFound: false });
 
+  let attempts = 0;
   for (let i = 0; i < config.collectableCount; i++) {
     let cx = random(200, config.flagpoleX - 100);
     let valid = true;
@@ -1269,8 +1307,12 @@ function generateCollectables(config) {
 
     if (valid) {
       collectables.push({ x_pos: cx, y_pos: floorPos_y - 20, isFound: false });
+      attempts = 0;
     } else {
-      i--;
+      attempts++;
+      if (attempts < 50) {
+        i--;
+      }
     }
   }
 
@@ -1485,6 +1527,8 @@ function getLevelConfig(lvl) {
 // ============================================================
 
 function draw() {
+  if (frameCount === 1) console.log("First Frame Drawn");
+
   if (gameState === STATE_START) {
     drawStartMenu();
   } else if (gameState === STATE_PLAYING) {
@@ -2017,7 +2061,16 @@ function drawGame() {
 }
 
 function drawSkyAndCelestialBodies() {
+  if (!seasons || seasons.length === 0) {
+    background(100, 180, 255); // Simple blue fallback
+    return;
+  }
   let s = seasons[currentSeasonIndex] || seasons[0];
+  if (!s) {
+    background(100, 180, 255);
+    return;
+  }
+
   let dayRatio = 1 - abs(timeOfDay - 720) / 720;
   let nightColor = color(10, 10, 30);
   let dayColor = s.sky;
